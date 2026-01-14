@@ -3,13 +3,8 @@
 > vite
 
 
-  VITE v5.4.21  ready in 769 ms
+  VITE v5.4.21  ready in 1217 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.31.9:5173/
-  ➜  Network: http://10.10.1.18:5173/
-11:02:02 [vite] hmr update /src/styles/gradient-background.css
-11:02:10 [vite] hmr update /src/styles/gradient-background.css
-11:02:19 [vite] hmr update /src/styles/gradient-background.css
-11:03:03 [vite] hmr update /src/styles/gradient-background.css
-11:03:59 [vite] hmr update /src/styles/gradient-background.css
+  ➜  Network: http://10.10.0.122:5173/
