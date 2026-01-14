@@ -1,0 +1,56 @@
+Starting development environment...
+Starting development environment (run-dev.sh)...
+[0;34m🚀 Starting InfraWatch Development Environment[0m
+==========================================
+[1;33mChecking Docker Desktop...[0m
+[0;32m✓ Docker Desktop is running[0m
+[1;33mTesting Docker CLI...[0m
+CONTAINER ID   IMAGE                   COMMAND                  CREATED       STATUS       PORTS                               NAMES
+e020e91f3150   phpmyadmin/phpmyadmin   "/docker-entrypoint.…"   2 weeks ago   Up 3 hours   0.0.0.0:8081->80/tcp                auth-phpmyadmin
+667e13702545   mysql:8.0               "docker-entrypoint.s…"   2 weeks ago   Up 3 hours   0.0.0.0:3306->3306/tcp, 33060/tcp   auth-mysql
+[1;33mCleaning up existing processes...[0m
+[1;33mPort 8000 is already in use. Trying to free...[0m
+[1;33mPort 5173 is already in use. Trying to free...[0m
+[1;33mPort 8081 is already in use. Trying to free...[0m
+
+[0;36m=== Starting Backend (FastAPI) ===[0m
+[0;32mAPI: http://localhost:8000[0m
+[0;32mDocs: http://localhost:8000/docs[0m
+Installing Python dependencies...
+Starting FastAPI server...
+[1;33mWaiting for backend to start...[0m
+[0;32m✓ Backend is ready![0m
+
+[0;36m=== Starting Frontend (Vite) ===[0m
+[0;32mURL: http://localhost:5173[0m
+
+[0;36m=== Starting Agent ===[0m
+Building agent...
+[0;32mAgent started as binary (PID 37633)[0m
+
+[0;34m══════════════════════════════════════════════════════════[0m
+[0;32m✅ Services started successfully![0m
+[0;34m══════════════════════════════════════════════════════════[0m
+
+[0;36m📊 Service Status:[0m
+  [0;32m✓ Backend API:    [0mhttp://localhost:8000
+  [0;32m✓ API Documentation: [0mhttp://localhost:8000/docs
+  [0;32m✓ Frontend App:   [0mhttp://localhost:5173
+  [0;32m✓ Agent:          [0mrunning (PID 37633)
+./run-dev.sh: line 138: ../../logs/agent.log: No such file or directory
+
+[0;36m🔍 Test Endpoints:[0m
+  [1;33m↪  Docker Debug:   [0mhttp://localhost:8000/api/v1/docker/debug
+  [1;33m↪  Docker Metrics: [0mhttp://localhost:8000/api/v1/docker/metrics
+  [1;33m↪  Docker Simple:  [0mhttp://localhost:8000/api/v1/docker/simple
+  [1;33m↪  System Info:    [0mhttp://localhost:8000/api/v1/system/info
+
+[0;36m📋 Log Files:[0m
+  [0;34mtail -f logs/backend.log[0m    - Backend logs
+  [0;34mtail -f logs/frontend.log[0m   - Frontend logs
+  [0;34mtail -f logs/agent.log[0m      - Agent logs
+
+[0;31m⚠️  Press Ctrl+C to stop all services[0m
+[0;34m══════════════════════════════════════════════════════════[0m
+./run-dev.sh: line 181: 37618 Killed: 9               uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 --log-level info > ../logs/backend.log 2>&1  (wd: ~/Documents/InfraWatch/backend)
+make: *** [dev] Error 1

@@ -1,0 +1,244 @@
+/* Градиентный фон с анимированными пятнами */
+.gradient-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+  background-size: 400% 400%;
+}
+
+.gradient-background::before,
+.gradient-background::after {
+  content: '';
+  position: absolute;
+  width: 30vw;
+  height: 30vh;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.85;
+  animation: float 12s ease-in-out infinite;
+}
+
+.gradient-background::before {
+  background: radial-gradient(ellipse at 20% 50%, rgba(16, 185, 129, 0.8), transparent);
+  top: -10%;
+  left: -10%;
+  animation-delay: 0s;
+}
+
+.gradient-background::after {
+  background: radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.8), transparent);
+  bottom: -6%;
+  right: -6%;
+  animation-delay: 2s;
+}
+
+@keyframes float {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(60px, -90px) scale(1.12);
+  }
+  66% {
+    transform: translate(-50px, 40px) scale(0.92);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+/* Дополнительные пятна для более выраженного и подвижного эффекта */
+.gradient-blob-1 {
+  position: fixed;
+  bottom: -6%;
+  left: 6%;
+  width: 40vw;
+  height: 40vh;
+  background: radial-gradient(ellipse at 50% 50%, rgba(79, 172, 254, 0.9), transparent);
+  border-radius: 50%;
+  filter: blur(20px);
+  animation: float-slow 25s ease-in-out infinite;
+  box-shadow: 0 20px 80px rgba(0,0,0,0.18), 0 2px 12px rgba(0,0,0,0.08) inset;
+  border: 1px solid rgba(255,255,255,0.04);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.gradient-blob-2 {
+  position: fixed;
+  top: 6%;
+  right: 4%;
+  width: 35vw;
+  height: 35vh;
+  background: radial-gradient(ellipse at 50% 50%, rgba(240, 147, 251, 0.92), transparent);
+  border-radius: 50%;
+  filter: blur(18px);
+  animation: float-slow 30s ease-in-out infinite reverse;
+  box-shadow: 0 20px 80px rgba(0,0,0,0.18), 0 2px 12px rgba(0,0,0,0.08) inset;
+  border: 1px solid rgba(255,255,255,0.04);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.gradient-blob-3 {
+  position: fixed;
+  top: 40%;
+  right: 42%;
+  width: 45vw;
+  height: 45vh;
+  background: radial-gradient(ellipse at 50% 50%, rgba(102, 126, 234, 0.88), transparent);
+  border-radius: 50%;
+  filter: blur(22px);
+  animation: float-medium 35s ease-in-out infinite;
+  box-shadow: 0 20px 80px rgba(0,0,0,0.18), 0 2px 12px rgba(0,0,0,0.08) inset;
+  border: 1px solid rgba(255,255,255,0.04);
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes float-slow {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translate(90px, -140px) rotate(90deg) scale(1.18);
+  }
+  50% {
+    transform: translate(-80px, 80px) rotate(180deg) scale(0.9);
+  }
+  75% {
+    transform: translate(120px, 40px) rotate(270deg) scale(1.12);
+  }
+  100% {
+    transform: translate(0, 0) rotate(360deg) scale(1);
+  }
+}
+
+@keyframes float-medium {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.7;
+  }
+  25% {
+    transform: translate(-100px, 120px) scale(1.25);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(80px, -60px) scale(0.85);
+    opacity: 0.6;
+  }
+  75% {
+    transform: translate(-120px, -80px) scale(1.15);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.7;
+  }
+}
+
+/* Поддержка dark mode */
+.dark .gradient-background {
+  background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 25%, #16213e 50%, #0f3460 75%, #533483 100%);
+}
+
+.dark .gradient-background::before {
+  background: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.6), transparent);
+}
+
+.dark .gradient-background::after {
+  background: radial-gradient(ellipse at 80% 80%, rgba(168, 85, 247, 0.6), transparent);
+}
+
+.dark .gradient-blob-1 {
+  background: radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.5), transparent);
+}
+
+.dark .gradient-blob-2 {
+  background: radial-gradient(ellipse at 50% 50%, rgba(168, 85, 247, 0.5), transparent);
+}
+
+.dark .gradient-blob-3 {
+  background: radial-gradient(ellipse at 50% 50%, rgba(99, 102, 241, 0.4), transparent);
+}
+
+/* Убедимся что content не перекрывается */
+.relative-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Динамический градиент для карточек */
+.gradient-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle 1200px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(0, 0, 0, 0.075), transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+  z-index: 10;
+  filter: blur(0px);
+}
+
+.gradient-card:hover::before {
+  opacity: 1;
+}
+
+/* Отключение эффекта для определённых карточек */
+.gradient-card.no-gradient-effect::before {
+  display: none;
+}
+
+.gradient-card.hover-green::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(34, 197, 94, 0.125), transparent 70%);
+}
+
+.gradient-card.hover-blue::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(59, 130, 246, 0.125), transparent 70%);
+}
+
+.gradient-card.hover-purple::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(168, 85, 247, 0.125), transparent 70%);
+}
+
+.gradient-card.hover-yellow::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(234, 179, 8, 0.125), transparent 70%);
+}
+
+.gradient-card.hover-violet::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(139, 92, 246, 0.125), transparent 70%);
+}
+
+.dark .gradient-card.hover-green::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(34, 197, 94, 0.175), transparent 70%);
+}
+
+.dark .gradient-card.hover-blue::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(59, 130, 246, 0.175), transparent 70%);
+}
+
+.dark .gradient-card.hover-purple::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(168, 85, 247, 0.175), transparent 70%);
+}
+
+.dark .gradient-card.hover-yellow::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(234, 179, 8, 0.175), transparent 70%);
+}
+
+.dark .gradient-card.hover-violet::before {
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(139, 92, 246, 0.175), transparent 70%);
+}
+
