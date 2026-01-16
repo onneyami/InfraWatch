@@ -8,6 +8,20 @@
   overflow: hidden;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
   background-size: 400% 400%;
+  /* Оптимизация: используем will-change и contain */
+  will-change: auto;
+  contain: layout style paint;
+}
+
+/* Уменьшена частота анимаций для экономии ресурсов */
+@media (prefers-reduced-motion: reduce) {
+  .gradient-background {
+    animation: none !important;
+  }
+  .gradient-background::before,
+  .gradient-background::after {
+    animation: none !important;
+  }
 }
 
 .gradient-background::before,
@@ -19,7 +33,7 @@
   border-radius: 50%;
   filter: blur(40px);
   opacity: 0.85;
-  animation: float 12s ease-in-out infinite;
+  animation: float 20s ease-in-out infinite;  /* Увеличена длительность с 12s до 20s */
 }
 
 .gradient-background::before {
@@ -185,7 +199,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle 1200px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(0, 0, 0, 0.075), transparent 70%);
+  background: radial-gradient(circle 1200px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(0, 0, 0, 0.025), transparent 70%);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s ease-out;
@@ -203,42 +217,42 @@
 }
 
 .gradient-card.hover-green::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(34, 197, 94, 0.125), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(34, 197, 94, 0.05), transparent 70%);
 }
 
 .gradient-card.hover-blue::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(59, 130, 246, 0.125), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(59, 130, 246, 0.05), transparent 70%);
 }
 
 .gradient-card.hover-purple::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(168, 85, 247, 0.125), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(168, 85, 247, 0.05), transparent 70%);
 }
 
 .gradient-card.hover-yellow::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(234, 179, 8, 0.125), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(234, 179, 8, 0.05), transparent 70%);
 }
 
 .gradient-card.hover-violet::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(139, 92, 246, 0.125), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(139, 92, 246, 0.05), transparent 70%);
 }
 
 .dark .gradient-card.hover-green::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(34, 197, 94, 0.175), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(34, 197, 94, 0.075), transparent 70%);
 }
 
 .dark .gradient-card.hover-blue::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(59, 130, 246, 0.175), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(59, 130, 246, 0.075), transparent 70%);
 }
 
 .dark .gradient-card.hover-purple::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(168, 85, 247, 0.175), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(168, 85, 247, 0.075), transparent 70%);
 }
 
 .dark .gradient-card.hover-yellow::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(234, 179, 8, 0.175), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(234, 179, 8, 0.075), transparent 70%);
 }
 
 .dark .gradient-card.hover-violet::before {
-  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(139, 92, 246, 0.175), transparent 70%);
+  background: radial-gradient(circle 900px at var(--mouse-x, 0%) var(--mouse-y, 0%), rgba(139, 92, 246, 0.075), transparent 70%);
 }
 
