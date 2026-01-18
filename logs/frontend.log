@@ -1,0 +1,11 @@
+
+> infrawatch-frontend@1.0.0 dev
+> vite
+
+
+  VITE v5.4.21  ready in 419 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.100.235:5173/
+  ➜  Network: http://10.10.0.150:5173/
+11:25:19 [vite] hmr update /src/styles/vulnerability-scanner.css

@@ -1,0 +1,8 @@
+README.md
+infrawatch_cli.py
+setup.py
+infrawatch.egg-info/PKG-INFO
+infrawatch.egg-info/SOURCES.txt
+infrawatch.egg-info/dependency_links.txt
+infrawatch.egg-info/entry_points.txt
+infrawatch.egg-info/top_level.txt

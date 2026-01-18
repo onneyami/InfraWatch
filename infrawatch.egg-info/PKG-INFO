@@ -1,0 +1,55 @@
+Metadata-Version: 2.4
+Name: infrawatch
+Version: 2.0.0
+Summary: InfraWatch - Infrastructure Monitoring System with Docker support
+Home-page: https://github.com/yourorg/infrawatch
+Author: InfraWatch Team
+Author-email: team@infrawatch.dev
+License: MIT
+Keywords: monitoring,docker,infrastructure,cli,system-monitoring,docker-monitoring
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: System :: Monitoring
+Classifier: Topic :: System :: Networking
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: requires-python
+Dynamic: summary
+
+# 🛡️ InfraWatch v0.1
+
+Минимальная рабочая версия платформы мониторинга.
+
+## 🚀 Быстрый старт
+
+```bash
+# 1. Запуск всех сервисов
+docker-compose up -d
+
+# 2. Открыть в браузере
+#    Frontend: http://localhost:3000
+#    Backend:  http://localhost:8000
+#    API Docs: http://localhost:8000/docs
+
+# 3. Запустить агент (в отдельном терминале)
+cd agent
+go run cmd/agent/main.go

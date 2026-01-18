@@ -14,6 +14,7 @@ import docker
 import subprocess
 from .health_check import router as health_router
 from .docker_simple import SimpleDockerMetrics
+from .trivy_scanner import trivy_scanner, TrivyScanner
 
 app = FastAPI(
     title="InfraWatch API v2.0",
@@ -1101,47 +1102,100 @@ async def delete_docker_volume(volume_id: str):
         raise HTTPException(status_code=500, detail=f"Error deleting volume: {str(e)}")
 
 @app.get("/api/v1/docker/image/{image_id}/vulnerabilities")
-async def get_image_vulnerabilities(image_id: str):
-    """Get vulnerabilities for a Docker image"""
+async def scan_image_vulnerabilities(image_id: str):
+    """
+    Сканирует Docker образ на уязвимости с помощью Trivy
+    
+    Args:
+        image_id: Имя или ID образа
+    
+    Returns:
+        Результаты сканирования с найденными уязвимостями
+    """
     try:
-        image = docker_client.images.get(image_id)
-        # Get image tags to use for scanning
-        tags = image.tags if image.tags else [image_id]
-        
-        # Attempt to scan using subprocess (requires trivy installed)
-        try:
-            result = subprocess.run(
-                ["trivy", "image", "--format", "json", tags[0] if tags else image_id],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                vulnerabilities = json.loads(result.stdout)
-                return {
-                    "status": "success",
-                    "image_id": image_id,
-                    "vulnerabilities": vulnerabilities
-                }
-            else:
-                # If trivy fails, return empty vulnerabilities with warning
-                return {
-                    "status": "warning",
-                    "image_id": image_id,
-                    "message": "Trivy scan failed or not installed",
-                    "vulnerabilities": []
-                }
-        except FileNotFoundError:
-            # Trivy not installed
+        # Проверяем доступность Trivy
+        if not TrivyScanner.check_trivy_installed():
             return {
                 "status": "warning",
-                "image_id": image_id,
-                "message": "Trivy is not installed. Install with: brew install trivy",
-                "vulnerabilities": []
+                "image": image_id,
+                "message": "Trivy is not installed. Install with: brew install trivy (macOS) or apt-get install trivy (Linux)",
+                "trivy_available": False
             }
+        
+        # Запускаем сканирование
+        result = trivy_scanner.scan_image(image_id)
+        
+        return result
+    
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error scanning image: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error scanning image vulnerabilities: {str(e)}"
+        )
+
+
+@app.get("/api/v1/docker/images")
+async def get_available_images():
+    """
+    Получает список доступных для сканирования Docker образов
+    
+    Returns:
+        Список локальных образов
+    """
+    try:
+        images = trivy_scanner.get_local_images()
+        return {
+            "status": "success",
+            "images": images,
+            "total": len(images)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching images: {str(e)}"
+        )
+
+
+@app.post("/api/v1/docker/image/scan")
+async def scan_image_by_name(request_data: Dict[str, str], background_tasks: BackgroundTasks):
+    """
+    Сканирует Docker образ по имени
+    
+    Payload:
+        {
+            "image_name": "nginx:latest"  # или любое другое имя образа
+        }
+    
+    Returns:
+        Результаты сканирования
+    """
+    try:
+        image_name = request_data.get("image_name", "").strip()
+        
+        if not image_name:
+            raise HTTPException(status_code=400, detail="image_name is required")
+        
+        # Проверяем доступность Trivy
+        if not TrivyScanner.check_trivy_installed():
+            return {
+                "status": "warning",
+                "image": image_name,
+                "message": "Trivy is not installed",
+                "trivy_available": False
+            }
+        
+        # Запускаем сканирование
+        result = trivy_scanner.scan_image(image_name)
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error during scan: {str(e)}"
+        )
         
 if __name__ == "__main__":
     import uvicorn

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 
 import DockerDashboard from './components/DockerDashboard'
+import { VulnerabilityScanner } from './components/VulnerabilityScanner'
 import { GradientCard } from './components/GradientCard'
 import './styles/gradient-background.css'
 
@@ -1276,6 +1277,10 @@ function App() {
             <DockerDashboard dockerMetrics={dockerMetrics} />
           </div>
         )}
+
+        <div className="mt-12">
+          <VulnerabilityScanner />
+        </div>
 
         {error && (
           <div className="mb-8 p-6 bg-gradient-to-r from-red-100/80 to-red-200/60 dark:from-red-900/30 dark:to-red-800/20 border border-red-300 dark:border-red-700/50 rounded-2xl transition-all duration-300 hover:scale-[1.01] hover:shadow-xl cursor-pointer">

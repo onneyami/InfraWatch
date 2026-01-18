@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import sys
+import os
+
+# Set project root for CLI
+os.environ['INFRAWATCH_ROOT'] = '/Users/mac/Documents/InfraWatch_2.0/InfraWatch'
+
+# Import and run CLI
+from infrawatch_cli import main
+if __name__ == '__main__':
+    sys.exit(main())
