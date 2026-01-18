@@ -144,6 +144,7 @@ class TrivyScanner:
             Отформатированный результат с информацией о проверенных компонентах
         """
         vulnerabilities = []
+        vulnerabilities_seen = set()  # Для дедубликации по ID
         summary = {
             "total": 0,
             "critical": 0,
@@ -171,15 +172,23 @@ class TrivyScanner:
             # Обработка уязвимостей
             vulnerabilities_list = result.get("Vulnerabilities", [])
             for vuln in vulnerabilities_list:
+                vuln_id = vuln.get("VulnerabilityID", "N/A")
+                
+                # Пропускаем дубликаты - учитываем только первое появление
+                if vuln_id in vulnerabilities_seen:
+                    continue
+                vulnerabilities_seen.add(vuln_id)
+                
                 severity = vuln.get("Severity", "UNKNOWN").upper()
+                severity_lower = severity.lower()
                 
                 # Обновляем статистику
                 summary["total"] += 1
-                if severity in summary:
-                    summary[severity] += 1
+                if severity_lower in summary:
+                    summary[severity_lower] += 1
                 
                 vulnerabilities.append({
-                    "id": vuln.get("VulnerabilityID", "N/A"),
+                    "id": vuln_id,
                     "title": vuln.get("Title", "Unknown vulnerability"),
                     "severity": severity,
                     "description": vuln.get("Description", ""),

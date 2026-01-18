@@ -14,7 +14,7 @@ if readme_path.exists():
 
 setup(
     name="infrawatch",
-    version="2.0.0",
+    version="2.5.0",
     description="InfraWatch - Infrastructure Monitoring System with Docker support",
     long_description=long_description,
     long_description_content_type="text/markdown",

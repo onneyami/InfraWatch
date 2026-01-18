@@ -17,9 +17,9 @@ from .docker_simple import SimpleDockerMetrics
 from .trivy_scanner import trivy_scanner, TrivyScanner
 
 app = FastAPI(
-    title="InfraWatch API v2.0",
+    title="InfraWatch API v2.5",
     description="Advanced Infrastructure Monitoring System",
-    version="2.0.0",
+    version="2.5.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -326,15 +326,15 @@ async def cleanup_old_metrics():
 async def startup_event():
     """Запуск фоновых задач при старте"""
     asyncio.create_task(cleanup_old_metrics())
-    print("InfraWatch API v2.0 started")
+    print("InfraWatch API v2.5 started")
     print(f"API Documentation: http://localhost:8000/docs")
 
 @app.get("/", tags=["Root"])
 async def root():
     """Корневой эндпоинт"""
     return {
-        "message": "Welcome to InfraWatch API v2.0",
-        "version": "2.0.0",
+        "message": "Welcome to InfraWatch API v2.5",
+        "version": "2.5.0",
         "endpoints": {
             "health": "/api/v1/health",
             "metrics": "/api/v1/metrics",
@@ -521,8 +521,8 @@ async def health_check():
 
         return HealthResponse(
             status="healthy",
-            service="InfraWatch API v2.0",
-            version="2.0.0",
+            service="InfraWatch API v2.5",
+            version="2.5.0",
             hostname=socket.gethostname(),
             timestamp=datetime.now(),
             system={

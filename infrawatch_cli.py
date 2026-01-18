@@ -156,7 +156,7 @@ class InfraWatchCLI:
     
     def version(self, args: argparse.Namespace) -> int:
         """Show InfraWatch version"""
-        print("InfraWatch v2.0.0")
+        print("InfraWatch v2.5.0")
         return 0
     
     def info(self, args: argparse.Namespace) -> int:
@@ -164,7 +164,7 @@ class InfraWatchCLI:
         print("📋 InfraWatch Information:")
         print("-" * 40)
         print(f"Project Root: {self.project_root}")
-        print(f"Version: 2.0.0")
+        print(f"Version: 2.5.0")
         print(f"Backend: Python FastAPI")
         print(f"Frontend: React + TypeScript")
         print(f"Agent: Go")

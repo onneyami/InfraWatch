@@ -390,7 +390,7 @@ func registerAgent(config Config) {
 		"agent_id":   config.AgentID,
 		"hostname":   getHostname(),
 		"ip_address": getLocalIP(),
-		"version":    "2.0",
+		"version":    "2.5",
 		"tags":       config.Tags,
 	}
 
@@ -427,7 +427,7 @@ func sendHeartbeat(config Config) {
 }
 
 func main() {
-	fmt.Println("🚀 Starting InfraWatch Agent v2.0...")
+	fmt.Println("🚀 Starting InfraWatch Agent v2.5...")
 	fmt.Println("📊 Advanced metrics collection enabled")
 
 	// Enable verbose debug from environment

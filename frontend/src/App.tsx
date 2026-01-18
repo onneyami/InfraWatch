@@ -1311,7 +1311,7 @@ function App() {
                   <p className="font-bold text-lg bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-300 bg-clip-text text-transparent">
                     InfraWatch
                   </p>
-                  <span className="text-xs bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded">v2.0</span>
+                  <span className="text-xs bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded">v2.5</span>
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Infrastructure Monitoring System</p>
               </div>
