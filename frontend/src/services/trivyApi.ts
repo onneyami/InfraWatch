@@ -16,7 +16,10 @@ export const trivyApi = {
 
   async scanImageVulnerabilities(imageId: string): Promise<any> {
     try {
-      const response = await axios.get(`${API_BASE}/docker/image/${imageId}/vulnerabilities`);
+      // Use POST instead of GET to handle image names with special characters (@sha256:...)
+      const response = await axios.post(`${API_BASE}/docker/image/scan`, {
+        image_name: imageId
+      });
       return response.data;
     } catch (error) {
       console.error(`Error scanning image ${imageId}:`, error);
