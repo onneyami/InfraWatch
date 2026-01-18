@@ -141,7 +141,7 @@ class TrivyScanner:
             image_name: Имя образа
         
         Returns:
-            Отформатированный результат
+            Отформатированный результат с информацией о проверенных компонентах
         """
         vulnerabilities = []
         summary = {
@@ -152,12 +152,25 @@ class TrivyScanner:
             "low": 0
         }
         
-        # Извлекаем уязвимости из всех результатов
+        # Информация о проверенных компонентах
+        scanned_components = []
+        
+        # Извлекаем уязвимости и информацию о компонентах из всех результатов
         results = report.get("Results", [])
         for result in results:
-            misconfigurations = result.get("Misconfigurations", [])
+            # Сохраняем информацию о проверенном компоненте
+            component_info = {
+                "target": result.get("Target", "Unknown"),
+                "type": result.get("Type", "unknown"),
+                "class": result.get("Class", "unknown"),
+                "packages_count": len(result.get("Packages", [])),
+                "vulnerabilities_count": len(result.get("Vulnerabilities", []))
+            }
+            scanned_components.append(component_info)
             
-            for vuln in misconfigurations:
+            # Обработка уязвимостей
+            vulnerabilities_list = result.get("Vulnerabilities", [])
+            for vuln in vulnerabilities_list:
                 severity = vuln.get("Severity", "UNKNOWN").upper()
                 
                 # Обновляем статистику
@@ -166,12 +179,14 @@ class TrivyScanner:
                     summary[severity] += 1
                 
                 vulnerabilities.append({
-                    "id": vuln.get("ID", "N/A"),
+                    "id": vuln.get("VulnerabilityID", "N/A"),
                     "title": vuln.get("Title", "Unknown vulnerability"),
                     "severity": severity,
                     "description": vuln.get("Description", ""),
-                    "fix": vuln.get("Remediation", ""),
-                    "references": vuln.get("References", [])
+                    "fix": vuln.get("FixedVersion", ""),
+                    "references": vuln.get("References", []),
+                    "package_name": vuln.get("PkgName", ""),
+                    "installed_version": vuln.get("InstalledVersion", "")
                 })
         
         return {
@@ -180,6 +195,7 @@ class TrivyScanner:
             "timestamp": datetime.now().isoformat(),
             "summary": summary,
             "vulnerabilities": vulnerabilities,
+            "scanned_components": scanned_components,
             "scan_tool": "trivy",
             "scan_type": "image-vulnerability"
         }
