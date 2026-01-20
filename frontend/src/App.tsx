@@ -26,11 +26,13 @@ import {
   Layers,
   SortAsc,
   SortDesc,
+  Square,
 } from 'lucide-react'
 
 import DockerDashboard from './components/DockerDashboard'
 import { VulnerabilityScanner } from './components/VulnerabilityScanner'
 import { GradientCard } from './components/GradientCard'
+import { trivyApi } from './services/trivyApi'
 import './styles/gradient-background.css'
 
 // Типы для метрик агента
@@ -228,6 +230,29 @@ const AgentMetricsComponent: React.FC<{ agentId: string; metrics: AgentMetrics }
   const [history, setHistory] = useState<AgentMetrics[]>([]);
   const [processSortConfig, setProcessSortConfig] = useState<ProcessSortConfig>({ key: 'cpu', direction: 'desc' });
   const [showAllProcesses, setShowAllProcesses] = useState(false);
+  const [stoppingProcess, setStoppingProcess] = useState<number | null>(null);
+
+  const handleStopProcess = async (pid: number, processName: string) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to stop process "${processName}" (PID: ${pid})? This action cannot be undone and may cause system instability.`
+    );
+    
+    if (!confirmed) return;
+    
+    setStoppingProcess(pid);
+    try {
+      const result = await trivyApi.stopProcess(pid, false);
+      if (result.status === 'success') {
+        alert(`Process stopped: ${result.message}`);
+      } else {
+        alert(`Error: ${result.message || 'Failed to stop process'}`);
+      }
+    } catch (error) {
+      alert('Error stopping process');
+    } finally {
+      setStoppingProcess(null);
+    }
+  };
 
   useEffect(() => {
     api.getAgentHistory(agentId, 20).then(setHistory);
@@ -520,6 +545,7 @@ const AgentMetricsComponent: React.FC<{ agentId: string; metrics: AgentMetrics }
                         <th className="pb-2">Memory</th>
                         <th className="pb-2">Status</th>
                         <th className="pb-2">User</th>
+                        <th className="pb-2 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -555,6 +581,17 @@ const AgentMetricsComponent: React.FC<{ agentId: string; metrics: AgentMetrics }
                                 {process.username || 'N/A'}
                               </span>
                             </div>
+                          </td>
+                          <td className="py-3 text-center">
+                            <button
+                              onClick={() => handleStopProcess(process.pid, process.name)}
+                              disabled={stoppingProcess === process.pid}
+                              className="px-3 py-1 bg-red-500 hover:bg-red-600 disabled:bg-gray-400 text-white rounded-lg text-xs font-medium transition-colors duration-300 flex items-center gap-1 mx-auto"
+                              title="Stop this process"
+                            >
+                              <Square className="w-3 h-3" />
+                              {stoppingProcess === process.pid ? 'Stopping...' : 'Stop'}
+                            </button>
                           </td>
                         </tr>
                       ))}

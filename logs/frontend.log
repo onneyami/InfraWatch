@@ -3,13 +3,8 @@
 > vite
 
 
-  VITE v5.4.21  ready in 289 ms
+  VITE v5.4.21  ready in 400 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.100.235:5173/
   ➜  Network: http://10.10.0.250:5173/
-18:40:42 [vite] hmr update /src/components/VulnerabilityScanner.tsx, /src/index.css
-18:40:42 [vite] hmr update /src/styles/vulnerability-scanner.css
-18:41:40 [vite] hmr update /src/styles/vulnerability-scanner.css
-18:41:40 [vite] hmr update /src/components/VulnerabilityScanner.tsx, /src/index.css
-18:42:01 [vite] hmr update /src/styles/vulnerability-scanner.css

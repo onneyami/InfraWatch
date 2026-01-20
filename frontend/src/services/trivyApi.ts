@@ -37,5 +37,18 @@ export const trivyApi = {
       console.error(`Error scanning image ${imageName}:`, error);
       return { status: 'error', message: 'Failed to scan image' };
     }
+  },
+
+  // Process management
+  async stopProcess(pid: number, force: boolean = false): Promise<any> {
+    try {
+      const response = await axios.post(`${API_BASE}/process/${pid}/stop`, {
+        force
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error stopping process ${pid}:`, error);
+      return { status: 'error', message: 'Failed to stop process' };
+    }
   }
 };

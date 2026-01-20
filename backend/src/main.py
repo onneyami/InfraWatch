@@ -1196,6 +1196,53 @@ async def scan_image_by_name(request_data: Dict[str, str], background_tasks: Bac
             status_code=500,
             detail=f"Error during scan: {str(e)}"
         )
+
+@app.post("/api/v1/process/{pid}/stop", tags=["System"])
+async def stop_process(pid: int, force: bool = False):
+    """
+    Остановить процесс по PID
+    
+    Args:
+        pid: Process ID
+        force: Использовать SIGKILL вместо SIGTERM
+    
+    Returns:
+        Статус операции
+    """
+    try:
+        import signal
+        import os
+        
+        # Проверяем что процесс существует
+        try:
+            proc = psutil.Process(pid)
+            process_name = proc.name()
+        except psutil.NoSuchProcess:
+            raise HTTPException(status_code=404, detail=f"Process with PID {pid} not found")
+        
+        # Пытаемся завершить процесс
+        if force:
+            os.kill(pid, signal.SIGKILL)
+            action = "killed"
+        else:
+            os.kill(pid, signal.SIGTERM)
+            action = "terminated"
+        
+        return {
+            "status": "success",
+            "action": action,
+            "pid": pid,
+            "process_name": process_name,
+            "message": f"Process {process_name} (PID: {pid}) {action} successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied to terminate process {pid}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error terminating process: {str(e)}")
+
         
 if __name__ == "__main__":
     import uvicorn
