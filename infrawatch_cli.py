@@ -132,6 +132,21 @@ class InfraWatchCLI:
         print("📦 Installing dependencies...")
         return self._run_make("install")
     
+    def install_backend(self, args: argparse.Namespace) -> int:
+        """Install backend dependencies"""
+        print("📦 Installing backend dependencies...")
+        return self._run_make("install-backend")
+    
+    def install_frontend(self, args: argparse.Namespace) -> int:
+        """Install frontend dependencies"""
+        print("📦 Installing frontend dependencies...")
+        return self._run_make("install-frontend")
+    
+    def install_agent(self, args: argparse.Namespace) -> int:
+        """Install agent dependencies"""
+        print("📦 Installing agent dependencies...")
+        return self._run_make("install-agent")
+    
     def setup(self, args: argparse.Namespace) -> int:
         """Setup InfraWatch (initial setup)"""
         print("⚙️  Setting up InfraWatch...")
@@ -179,20 +194,30 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  infrawatch start                Start all services
-  infrawatch stop                 Stop all services  
-  infrawatch restart              Restart all services
-  infrawatch status               Check service status
-  infrawatch logs                 Show all logs
-  infrawatch logs backend         Show backend logs only
-  infrawatch install              Install dependencies
-  infrawatch setup                Setup project (first time)
-  infrawatch build-agent          Build Go agent
-  infrawatch dev                  Quick development start
-  infrawatch clean                Clean build artifacts
-  infrawatch clean --all          Full cleanup (venv, node_modules)
-  infrawatch version              Show version
-  infrawatch info                 Show project information
+  infrawatch start                    Start all services
+  infrawatch stop                     Stop all services  
+  infrawatch restart                  Restart all services
+  infrawatch status                   Check service status
+  
+  infrawatch logs                     Show all logs
+  infrawatch logs backend             Show backend logs only
+  infrawatch logs frontend            Show frontend logs
+  infrawatch logs agent               Show agent logs
+  
+  infrawatch install                  Install all dependencies
+  infrawatch install-backend          Install backend dependencies
+  infrawatch install-frontend         Install frontend dependencies
+  infrawatch install-agent            Install agent dependencies
+  infrawatch setup                    Setup project (first time)
+  
+  infrawatch build-agent              Build Go agent
+  infrawatch dev                      Quick development start
+  
+  infrawatch clean                    Clean build artifacts
+  infrawatch clean --all              Full cleanup (venv, node_modules)
+  
+  infrawatch version                  Show version
+  infrawatch info                     Show project information
         """
     )
     
@@ -212,7 +237,10 @@ Examples:
         help='Specific service logs (optional)'
     )
     
-    subparsers.add_parser('install', help='Install dependencies')
+    subparsers.add_parser('install', help='Install all dependencies')
+    subparsers.add_parser('install-backend', help='Install backend dependencies')
+    subparsers.add_parser('install-frontend', help='Install frontend dependencies')
+    subparsers.add_parser('install-agent', help='Install agent dependencies')
     subparsers.add_parser('setup', help='Setup project')
     
     clean_parser = subparsers.add_parser('clean', help='Clean artifacts')
@@ -244,6 +272,9 @@ Examples:
         'status': cli.status,
         'logs': cli.logs,
         'install': cli.install,
+        'install-backend': cli.install_backend,
+        'install-frontend': cli.install_frontend,
+        'install-agent': cli.install_agent,
         'setup': cli.setup,
         'clean': cli.clean,
         'build-agent': cli.build_agent,
