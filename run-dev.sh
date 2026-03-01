@@ -109,6 +109,7 @@ fi
 echo -e "${YELLOW}Cleaning up existing processes...${NC}"
 check_port 8000
 check_port 5173
+check_port 5176
 pkill -f "uvicorn" || true
 pkill -f "vite" || true
 
@@ -118,7 +119,12 @@ mkdir -p logs
 # Function to handle cleanup
 cleanup() {
     echo -e "\n${YELLOW}Shutting down InfraWatch...${NC}"
-    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+    kill $BACKEND_PID $FRONTEND_PID $FRONTEND_LIGHT_PID 2>/dev/null || true
+    # Remove temporary light dist if created
+    if [ -n "$FRONTEND_LIGHT_TMPDIR" ] && [ -d "$FRONTEND_LIGHT_TMPDIR" ]; then
+        echo "Removing temporary light dist: $FRONTEND_LIGHT_TMPDIR"
+        rm -rf "$FRONTEND_LIGHT_TMPDIR" || true
+    fi
     echo -e "${GREEN}All services stopped. Goodbye! 👋${NC}"
     exit 0
 }
@@ -184,16 +190,53 @@ npm run dev > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..
 
+# Start Light Frontend (simple light version) if files present
+echo -e "\n${CYAN}=== Checking Light Frontend ===${NC}"
+if [ -f "frontend/src/AppLight.tsx" ]; then
+    echo "Light frontend files found — building and serving on port 5176"
+    cd frontend
+    # Build (will include light.html)
+    npm run build > ../logs/frontend-light.log 2>&1 || true
+    # Create a temporary copy of dist and make light.html the index
+    TMP_DIST=$(mktemp -d /tmp/infrawatch-dist-XXXX) || TMP_DIST=""
+    if [ -n "$TMP_DIST" ] && [ -d "dist" ]; then
+        cp -R dist/* "$TMP_DIST/" || true
+        # Prefer an explicit frontend/light.html (project root) as index for light version
+        if [ -f "light.html" ]; then
+            cp "light.html" "$TMP_DIST/index.html" || true
+        elif [ -f "$TMP_DIST/light.html" ]; then
+            mv "$TMP_DIST/light.html" "$TMP_DIST/index.html" || true
+        fi
+        # Serve the temporary dist with python http.server on the requested port
+        (cd "$TMP_DIST" && python3 -m http.server 5176 > ../../logs/frontend-light.log 2>&1 &) || true
+        FRONTEND_LIGHT_PID=$!
+        FRONTEND_LIGHT_TMPDIR="$TMP_DIST"
+    else
+        echo "Failed to create temporary dist for light frontend. Skipping light serve." >> ../logs/frontend-light.log 2>&1 || true
+        FRONTEND_LIGHT_PID=""
+        FRONTEND_LIGHT_TMPDIR=""
+    fi
+    cd ..
+else
+    echo -e "${YELLOW}Light frontend not present in frontend/src — skipping${NC}"
+    FRONTEND_LIGHT_PID=""
+fi
+
 echo ""
 echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✅ Services started successfully!${NC}"
 echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
 echo ""
 echo -e "${CYAN}📊 Service Status:${NC}"
-echo -e "  ${GREEN}✓ Backend API:    ${NC}http://localhost:8000"
-echo -e "  ${GREEN}✓ API Documentation: ${NC}http://localhost:8000/docs"
-echo -e "  ${GREEN}✓ Frontend App:   ${NC}http://localhost:5173"
-echo -e "  ${YELLOW}⚠ Agent:          ${NC}Temporarily disabled (Go compilation issues)"
+echo -e "  ${GREEN}✓ Backend API:         ${NC}http://localhost:8000"
+echo -e "  ${GREEN}✓ API Documentation:  ${NC}http://localhost:8000/docs"
+echo -e "  ${GREEN}✓ Frontend App:       ${NC}http://localhost:5173"
+if [ -n "$FRONTEND_LIGHT_PID" ]; then
+    echo -e "  ${GREEN}✓ Frontend (Light):    ${NC}http://localhost:5176"
+else
+    echo -e "  ${YELLOW}⚠ Frontend (Light):    ${NC}Not running"
+fi
+echo -e "  ${YELLOW}⚠ Agent:              ${NC}Temporarily disabled (Go compilation issues)"
 echo ""
 echo -e "${CYAN}🔍 Test Endpoints:${NC}"
 echo -e "  ${YELLOW}↪  Docker Debug:   ${NC}http://localhost:8000/api/v1/docker/debug"
@@ -202,8 +245,11 @@ echo -e "  ${YELLOW}↪  Docker Simple:  ${NC}http://localhost:8000/api/v1/docke
 echo -e "  ${YELLOW}↪  System Info:    ${NC}http://localhost:8000/api/v1/system/info"
 echo ""
 echo -e "${CYAN}📋 Log Files:${NC}"
-echo -e "  ${BLUE}tail -f logs/backend.log${NC}    - Backend logs"
-echo -e "  ${BLUE}tail -f logs/frontend.log${NC}   - Frontend logs"
+echo -e "  ${BLUE}tail -f logs/backend.log${NC}       - Backend logs"
+echo -e "  ${BLUE}tail -f logs/frontend.log${NC}      - Frontend logs"
+if [ -n "$FRONTEND_LIGHT_PID" ]; then
+    echo -e "  ${BLUE}tail -f logs/frontend-light.log${NC} - Light frontend logs"
+fi
 echo ""
 echo -e "${RED}⚠️  Press Ctrl+C to stop all services${NC}"
 echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
@@ -239,4 +285,8 @@ else
 fi
 
 # Wait for all processes
-wait $BACKEND_PID $FRONTEND_PID
+if [ -n "$FRONTEND_LIGHT_PID" ]; then
+    wait $BACKEND_PID $FRONTEND_PID $FRONTEND_LIGHT_PID 2>/dev/null
+else
+    wait $BACKEND_PID $FRONTEND_PID
+fi
