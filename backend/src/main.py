@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import psutil
 import socket
+import platform
 import asyncio
 import time
 import json
@@ -642,7 +643,7 @@ async def get_system_info():
         return {
             "system": {
                 "hostname": socket.gethostname(),
-                "platform": psutil.platform(),
+                "platform": platform.platform(),
                 "boot_time": psutil.boot_time(),
                 "uptime": time.time() - psutil.boot_time(),
             },
@@ -672,8 +673,8 @@ async def get_system_info():
             },
             "processes": {
                 "count": len(processes),
-                "top_cpu": sorted(processes, key=lambda x: x.get('cpu_percent', 0), reverse=True)[:5],
-                "top_memory": sorted(processes, key=lambda x: x.get('memory_percent', 0), reverse=True)[:5],
+                "top_cpu": sorted(processes, key=lambda x: x.get('cpu_percent') or 0, reverse=True)[:5],
+                "top_memory": sorted(processes, key=lambda x: x.get('memory_percent') or 0, reverse=True)[:5],
             },
             "temperatures": temps,
             "timestamp": datetime.now().isoformat()

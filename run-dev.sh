@@ -196,23 +196,33 @@ if [ -f "frontend/src/AppLight.tsx" ]; then
     echo "Light frontend files found — building and serving on port 5176"
     cd frontend
     # Build (will include light.html)
-    npm run build > ../logs/frontend-light.log 2>&1 || true
-    # Create a temporary copy of dist and make light.html the index
+    # Use absolute path for logs so redirections are deterministic
+    REPO_ROOT="$(pwd)/.."
+    LOG_ROOT="$REPO_ROOT/logs"
+    npm run build > "$LOG_ROOT/frontend-light.log" 2>&1 || true
+
+    # Create a single temporary copy of dist and make light.html the index
     TMP_DIST=$(mktemp -d /tmp/infrawatch-dist-XXXX) || TMP_DIST=""
     if [ -n "$TMP_DIST" ] && [ -d "dist" ]; then
-        cp -R dist/* "$TMP_DIST/" || true
-        # Prefer an explicit frontend/light.html (project root) as index for light version
-        if [ -f "light.html" ]; then
-            cp "light.html" "$TMP_DIST/index.html" || true
-        elif [ -f "$TMP_DIST/light.html" ]; then
+        # Copy dist contents (use dot to preserve structure)
+        cp -R dist/. "$TMP_DIST/" || true
+        # Prefer the built light.html from dist (if present) so assets point to generated files
+        if [ -f "$TMP_DIST/light.html" ]; then
             mv "$TMP_DIST/light.html" "$TMP_DIST/index.html" || true
+        elif [ -f "light.html" ]; then
+            # Fallback: copy source light.html (not preferred, may reference dev src)
+            cp "light.html" "$TMP_DIST/index.html" || true
         fi
-        # Serve the temporary dist with python http.server on the requested port
-        (cd "$TMP_DIST" && python3 -m http.server 5176 > ../../logs/frontend-light.log 2>&1 &) || true
+
+        # Start python http.server from the TMP_DIST so $! refers to the python pid
+        pushd "$TMP_DIST" > /dev/null || true
+        python3 -m http.server 5176 > "$LOG_ROOT/frontend-light.log" 2>&1 &
         FRONTEND_LIGHT_PID=$!
+        popd > /dev/null || true
         FRONTEND_LIGHT_TMPDIR="$TMP_DIST"
+        echo "Started light frontend (pid=$FRONTEND_LIGHT_PID) serving from $FRONTEND_LIGHT_TMPDIR" >> "$LOG_ROOT/frontend-light.log" 2>&1 || true
     else
-        echo "Failed to create temporary dist for light frontend. Skipping light serve." >> ../logs/frontend-light.log 2>&1 || true
+        echo "Failed to create temporary dist for light frontend. Skipping light serve." >> "$LOG_ROOT/frontend-light.log" 2>&1 || true
         FRONTEND_LIGHT_PID=""
         FRONTEND_LIGHT_TMPDIR=""
     fi

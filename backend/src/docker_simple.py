@@ -49,15 +49,41 @@ class DockerCLI:
         cmd = [c for c in cmd if c]
         result = DockerCLI.run_command(cmd)
         
-        if result.get("success") and isinstance(result.get("data"), str):
-            # Если это строка, парсим построчно
-            lines = [line for line in result["data"].split('\n') if line]
+        if result.get("success"):
+            data = result.get("data")
             containers = []
-            for line in lines:
+
+            # run_command может уже вернуть распарсенный JSON (dict или list)
+            if isinstance(data, dict):
+                containers = [data]
+            elif isinstance(data, list):
+                containers = data
+            elif isinstance(data, str):
+                # Строка — пробуем распарсить
+                raw_data = data.strip()
                 try:
-                    containers.append(json.loads(line))
+                    parsed = json.loads(raw_data)
+                    if isinstance(parsed, list):
+                        containers = parsed
+                    elif isinstance(parsed, dict):
+                        containers = [parsed]
                 except:
-                    pass
+                    # Попытка: разбить по объектам по скобкам
+                    depth = 0
+                    current_obj = ""
+                    for char in raw_data:
+                        if char == '{':
+                            depth += 1
+                        elif char == '}':
+                            depth -= 1
+                        current_obj += char
+                        if depth == 0 and current_obj.strip():
+                            try:
+                                containers.append(json.loads(current_obj))
+                            except:
+                                pass
+                            current_obj = ""
+
             result["data"] = containers
         
         return result
@@ -68,14 +94,20 @@ class DockerCLI:
         cmd = ["docker", "images", "--format", "{{json .}}"]
         result = DockerCLI.run_command(cmd)
         
-        if result.get("success") and isinstance(result.get("data"), str):
-            lines = [line for line in result["data"].split('\n') if line]
+        if result.get("success"):
+            data = result.get("data")
             images = []
-            for line in lines:
-                try:
-                    images.append(json.loads(line))
-                except:
-                    pass
+            if isinstance(data, dict):
+                images = [data]
+            elif isinstance(data, list):
+                images = data
+            elif isinstance(data, str):
+                lines = [line for line in data.split('\n') if line]
+                for line in lines:
+                    try:
+                        images.append(json.loads(line))
+                    except:
+                        pass
             result["data"] = images
         
         return result
@@ -86,14 +118,20 @@ class DockerCLI:
         cmd = ["docker", "network", "ls", "--format", "{{json .}}"]
         result = DockerCLI.run_command(cmd)
         
-        if result.get("success") and isinstance(result.get("data"), str):
-            lines = [line for line in result["data"].split('\n') if line]
+        if result.get("success"):
+            data = result.get("data")
             networks = []
-            for line in lines:
-                try:
-                    networks.append(json.loads(line))
-                except:
-                    pass
+            if isinstance(data, dict):
+                networks = [data]
+            elif isinstance(data, list):
+                networks = data
+            elif isinstance(data, str):
+                lines = [line for line in data.split('\n') if line]
+                for line in lines:
+                    try:
+                        networks.append(json.loads(line))
+                    except:
+                        pass
             result["data"] = networks
         
         return result
@@ -104,14 +142,20 @@ class DockerCLI:
         cmd = ["docker", "volume", "ls", "--format", "{{json .}}"]
         result = DockerCLI.run_command(cmd)
         
-        if result.get("success") and isinstance(result.get("data"), str):
-            lines = [line for line in result["data"].split('\n') if line]
+        if result.get("success"):
+            data = result.get("data")
             volumes = []
-            for line in lines:
-                try:
-                    volumes.append(json.loads(line))
-                except:
-                    pass
+            if isinstance(data, dict):
+                volumes = [data]
+            elif isinstance(data, list):
+                volumes = data
+            elif isinstance(data, str):
+                lines = [line for line in data.split('\n') if line]
+                for line in lines:
+                    try:
+                        volumes.append(json.loads(line))
+                    except:
+                        pass
             result["data"] = volumes
         
         return result
@@ -474,12 +518,31 @@ class SimpleDockerMetrics:
             containers_data = containers_result.get("data", [])
             print(f"📦 Found {len(containers_data)} containers")
             
+            import json as _json
             for container_data in containers_data:
                 try:
-                    formatted = SimpleDockerMetrics.format_container(container_data)
+                    # Some `docker ps --format {{json .}}` implementations return
+                    # JSON per line (strings) or already-parsed dicts. Handle both.
+                    parsed = container_data
+                    if isinstance(container_data, str):
+                        try:
+                            parsed = _json.loads(container_data)
+                        except Exception:
+                            # fallback: treat the whole string as a name field
+                            parsed = {"Names": container_data}
+
+                    if not isinstance(parsed, dict):
+                        raise ValueError("Unsupported container data format")
+
+                    formatted = SimpleDockerMetrics.format_container(parsed)
                     containers.append(formatted)
                 except Exception as e:
-                    print(f"⚠️ Error formatting container {container_data.get('ID', 'unknown')}: {e}")
+                    # Avoid calling `.get` on non-dict objects when logging
+                    try:
+                        repr_container = parsed if isinstance(parsed, dict) else str(container_data)
+                    except Exception:
+                        repr_container = str(container_data)
+                    print(f"⚠️ Error formatting container {repr_container}: {e}")
                     continue
         else:
             print(f"⚠️ Failed to get containers: {containers_result.get('error')}")
