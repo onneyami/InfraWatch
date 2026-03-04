@@ -1,8 +1,622 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
+import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3 } from 'lucide-react'
 import axios from 'axios'
 import DockerDashboardLight from './components/DockerDashboardLight'
+import { api } from './services/api'
+import { AgentMetrics as AgentMetricsType } from './types/metrics'
 
 const API_BASE = 'http://localhost:8000/api/v1'
+
+// Типы для истории метрик
+interface MetricHistory {
+  cpu: number
+  memory: number
+  timestamp: number
+}
+
+// Типы для процессов
+interface ProcessInfo {
+  pid: number
+  name: string
+  cpu_percent: number
+  memory_percent: number
+  status: string
+  username?: string
+}
+
+// ========== AGENT METRICS LIGHT - С детальной информацией ==========
+const AgentMetricsLight: React.FC<{ agentId: string; initialMetrics?: AgentMetricsType }> = ({ agentId, initialMetrics }) => {
+  const [metrics, setMetrics] = useState<AgentMetricsType | null>(initialMetrics || null)
+  const [history, setHistory] = useState<AgentMetricsType[]>([])
+  const [loading, setLoading] = useState(!initialMetrics)
+  const [expanded, setExpanded] = useState(false)
+  const [processSortKey, setProcessSortKey] = useState<'cpu' | 'memory' | 'name'>('cpu')
+  const [processSortDir, setProcessSortDir] = useState<'asc' | 'desc'>('desc')
+  const [showAllProcesses, setShowAllProcesses] = useState(false)
+  const [stoppingProcess, setStoppingProcess] = useState<number | null>(null)
+  const [selectedProcess, setSelectedProcess] = useState<ProcessInfo | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!initialMetrics) {
+      fetchMetrics()
+    }
+    fetchHistory()
+
+    intervalRef.current = setInterval(() => {
+      fetchMetrics()
+      fetchHistory()
+    }, 5000)
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [agentId])
+
+  const fetchMetrics = async () => {
+    try {
+      const all = await api.getAgentMetrics()
+      if (all[agentId]) setMetrics(all[agentId])
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  const fetchHistory = async () => {
+    const data = await api.getAgentHistory(agentId, 20)
+    setHistory(data)
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i]
+  }
+
+  const formatTime = (seconds: number) => {
+    const days = Math.floor(seconds / 86400)
+    const hours = Math.floor((seconds % 86400) / 3600)
+    const mins = Math.floor((seconds % 3600) / 60)
+    if (days > 0) return `${days}d ${hours}h`
+    if (hours > 0) return `${hours}h ${mins}m`
+    return `${mins}m`
+  }
+
+  const formatDate = (ts: number) => new Date(ts * 1000).toLocaleTimeString()
+
+  const handleStopProcess = async (pid: number, name: string) => {
+    if (!confirm(`Stop process "${name}" (PID: ${pid})?`)) return
+    setStoppingProcess(pid)
+    try {
+      const res = await axios.post(`${API_BASE}/process/${pid}/stop`, { force: false })
+      alert(res.data.status === 'success' ? 'Process stopped' : res.data.message)
+      fetchMetrics()
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setStoppingProcess(null)
+    }
+  }
+
+  const sortedProcesses = React.useMemo(() => {
+    if (!metrics?.processes) return []
+    const sorted = [...metrics.processes].sort((a, b) => {
+      if (processSortKey === 'name') return a.name.localeCompare(b.name)
+      if (processSortKey === 'cpu') return b.cpu_percent - a.cpu_percent
+      return b.memory_percent - a.memory_percent
+    })
+    return processSortDir === 'asc' ? sorted.reverse() : sorted
+  }, [metrics?.processes, processSortKey, processSortDir])
+
+  const displayedProcesses = showAllProcesses ? sortedProcesses : sortedProcesses.slice(0, 5)
+
+  if (loading) {
+    return <div className="agent-card"><div className="skeleton" style={{height: 100}} /></div>
+  }
+
+  if (!metrics) {
+    return <div className="agent-card"><p className="text-muted">No data</p></div>
+  }
+
+  return (
+    <div className="agent-card">
+      {/* Header - всегда виден */}
+      <div className="agent-header-clickable" onClick={() => setExpanded(!expanded)}>
+        <div className="agent-header">
+          <Server className="w-4 h-4" />
+          <div className="agent-info">
+            <span className="agent-hostname">{metrics.system.hostname}</span>
+            <span className="agent-id">{agentId}</span>
+          </div>
+        </div>
+        <div className="agent-header-right">
+          <span className="agent-uptime">{formatTime(metrics.system.uptime)}</span>
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
+      </div>
+
+      {/* Quick Stats - всегда видны */}
+      <div className="agent-quick-stats">
+        <div className="quick-stat">
+          <Cpu className="w-3 h-3" />
+          <span>{metrics.cpu.usage.toFixed(1)}%</span>
+        </div>
+        <div className="quick-stat">
+          <MemoryStick className="w-3 h-3" />
+          <span>{metrics.memory.used_percent.toFixed(1)}%</span>
+        </div>
+        <div className="quick-stat">
+          <HardDrive className="w-3 h-3" />
+          <span>{metrics.disks?.length || 0} disks</span>
+        </div>
+      </div>
+
+      {/* Expanded Details */}
+      {expanded && (
+        <div className="agent-details">
+          {/* System Info */}
+          <div className="detail-section">
+            <h4>System Info</h4>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <span className="detail-label">OS</span>
+                <span className="detail-value">{metrics.system.os}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Platform</span>
+                <span className="detail-value">{metrics.system.platform}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">CPU Cores</span>
+                <span className="detail-value">{metrics.system.num_cpu}</span>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label">Memory Total</span>
+                <span className="detail-value">{formatBytes(metrics.memory.total)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Disks */}
+          {metrics.disks && metrics.disks.length > 0 && (
+            <div className="detail-section">
+              <h4>Disks</h4>
+              <div className="disks-list">
+                {metrics.disks.slice(0, 3).map((disk, i) => (
+                  <div key={i} className="disk-item">
+                    <span className="disk-mount">{disk.mountpoint}</span>
+                    <div className="disk-bar-wrap">
+                      <div className="disk-bar" style={{width: `${disk.used_percent}%`}} />
+                    </div>
+                    <span className="disk-percent">{disk.used_percent.toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Docker Stats */}
+          {metrics.docker && (
+            <div className="detail-section">
+              <h4>Docker</h4>
+              <div className="docker-stats-mini">
+                <span className="docker-stat-mini">{metrics.docker.containers_running} running</span>
+                <span className="docker-stat-mini">{metrics.docker.containers_stopped} stopped</span>
+                <span className="docker-stat-mini">{metrics.docker.containers_total} total</span>
+              </div>
+            </div>
+          )}
+
+          {/* CPU History Chart */}
+          {history.length > 0 && (
+            <div className="detail-section">
+              <h4>CPU History</h4>
+              <div className="cpu-history-chart">
+                {history.slice(-15).map((h, i) => (
+                  <div
+                    key={i}
+                    className="history-bar"
+                    style={{height: `${Math.min(h.cpu.usage, 100)}%`}}
+                    title={`${h.cpu.usage.toFixed(1)}% at ${formatDate(h.timestamp)}`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Top Processes */}
+          {metrics.processes && metrics.processes.length > 0 && (
+            <div className="detail-section">
+              <div className="processes-header">
+                <h4>Top Processes ({metrics.processes.length})</h4>
+                <div className="process-controls">
+                  <select
+                    value={processSortKey}
+                    onChange={(e) => setProcessSortKey(e.target.value as any)}
+                    className="sort-select"
+                  >
+                    <option value="cpu">CPU</option>
+                    <option value="memory">Memory</option>
+                    <option value="name">Name</option>
+                  </select>
+                  <button
+                    onClick={() => setProcessSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+                    className="btn-sort"
+                    title={processSortDir === 'asc' ? 'Ascending' : 'Descending'}
+                  >
+                    <ArrowUpDown className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="processes-list">
+                {displayedProcesses.map((proc) => (
+                  <div key={proc.pid} className="process-item" onClick={() => setSelectedProcess(proc)}>
+                    <div className="process-info">
+                      <span className="process-name">{proc.name}</span>
+                      <span className="process-pid">PID: {proc.pid}</span>
+                    </div>
+                    <div className="process-stats">
+                      <span className={`process-cpu ${proc.cpu_percent > 50 ? 'high' : ''}`}>
+                        {proc.cpu_percent.toFixed(1)}% CPU
+                      </span>
+                      <span className="process-mem">
+                        {proc.memory_percent.toFixed(1)}% MEM
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleStopProcess(proc.pid, proc.name) }}
+                        disabled={stoppingProcess === proc.pid}
+                        className="btn-stop-process"
+                        title="Stop process"
+                      >
+                        {stoppingProcess === proc.pid ? '...' : <Square className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {metrics.processes.length > 5 && (
+                <button
+                  onClick={() => setShowAllProcesses(!showAllProcesses)}
+                  className="btn-view-all"
+                >
+                  {showAllProcesses ? (
+                    <>Show Less</>
+                  ) : (
+                    <>View All ({metrics.processes.length}) <Eye className="w-3 h-3" /></>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Process Detail Modal */}
+      {selectedProcess && (
+        <div className="modal-overlay" onClick={() => setSelectedProcess(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{selectedProcess.name}</h3>
+              <button onClick={() => setSelectedProcess(null)} className="btn-close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <span className="detail-label">PID</span>
+                  <span className="detail-value">{selectedProcess.pid}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">CPU</span>
+                  <span className="detail-value">{selectedProcess.cpu_percent.toFixed(1)}%</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Memory</span>
+                  <span className="detail-value">{selectedProcess.memory_percent.toFixed(1)}%</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Status</span>
+                  <span className="detail-value">{selectedProcess.status}</span>
+                </div>
+                {selectedProcess.username && (
+                  <div className="detail-item">
+                    <span className="detail-label">User</span>
+                    <span className="detail-value">{selectedProcess.username}</span>
+                  </div>
+                )}
+              </div>
+              <div className="modal-actions">
+                <button
+                  onClick={() => handleStopProcess(selectedProcess.pid, selectedProcess.name)}
+                  disabled={stoppingProcess === selectedProcess.pid}
+                  className="btn-stop-process-large"
+                >
+                  <Square className="w-4 h-4" />
+                  {stoppingProcess === selectedProcess.pid ? 'Stopping...' : 'Stop Process'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ========== VULNERABILITY SCANNER LIGHT - С детальной информацией ==========
+const VulnerabilityScannerLight: React.FC = () => {
+  const [images, setImages] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [scanning, setScanning] = useState<string | null>(null)
+  const [scanResult, setScanResult] = useState<any>(null)
+  const [expandedVuln, setExpandedVuln] = useState<string | null>(null)
+  const [showAllVulns, setShowAllVulns] = useState(false)
+  const [selectedVuln, setSelectedVuln] = useState<any>(null)
+
+  const fetchImages = async () => {
+    setLoading(true)
+    try {
+      const res = await axios.get(`${API_BASE}/docker/images`)
+      if (res.data.images) setImages(res.data.images)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { fetchImages() }, [])
+
+  const handleScan = async (name: string) => {
+    setScanning(name)
+    setScanResult(null)
+    try {
+      const res = await axios.post(`${API_BASE}/docker/image/scan`, { image_name: name })
+      setScanResult(res.data)
+    } catch (e: any) {
+      setScanResult({ status: 'error', message: e.message })
+    } finally {
+      setScanning(null)
+    }
+  }
+
+  const formatSize = (bytes: number) => {
+    if (!bytes) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i]
+  }
+
+  const getSeverityColor = (sev: string) => {
+    const colors: Record<string, string> = { CRITICAL: '#dc2626', HIGH: '#ea580c', MEDIUM: '#eab308', LOW: '#3b82f6' }
+    return colors[sev?.toUpperCase()] || '#6b7280'
+  }
+
+  const getSeverityLabel = (sev: string) => {
+    const labels: Record<string, string> = {
+      CRITICAL: 'Critical - Immediate action required',
+      HIGH: 'High - Urgent attention needed',
+      MEDIUM: 'Medium - Should be addressed',
+      LOW: 'Low - Consider addressing'
+    }
+    return labels[sev?.toUpperCase()] || 'Unknown severity'
+  }
+
+  const vulnerabilities = scanResult?.vulnerabilities || []
+  const displayedVulns = showAllVulns ? vulnerabilities : vulnerabilities.slice(0, 10)
+
+  return (
+    <div className="vuln-scanner-light">
+      <div className="vuln-header">
+        <Shield className="w-5 h-5" />
+        <span>Vulnerability Scanner</span>
+        <button onClick={fetchImages} disabled={loading} className="btn-refresh">
+          {loading ? '...' : '↻'}
+        </button>
+      </div>
+
+      <div className="vuln-images">
+        {images.length === 0 ? (
+          <p className="text-muted">No images found</p>
+        ) : (
+          images.slice(0, 6).map((img) => (
+            <div key={img.id} className="vuln-image-card">
+              <div className="vuln-image-info">
+                <span className="vuln-image-name">{img.name || img.id?.slice(0, 12)}</span>
+                <span className="vuln-image-size">{formatSize(img.size)}</span>
+              </div>
+              <button
+                onClick={() => handleScan(img.name)}
+                disabled={scanning !== null}
+                className="btn-scan"
+              >
+                {scanning === img.name ? 'Scanning...' : 'Scan'}
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Scan Results */}
+      {scanResult && (
+        <div className="vuln-result">
+          {scanResult.status === 'error' ? (
+            <div className="vuln-error">
+              <span>❌</span>
+              <span>{scanResult.message || 'Scan failed'}</span>
+            </div>
+          ) : scanResult.summary ? (
+            <>
+              {/* Summary */}
+              <div className="vuln-summary">
+                <span className="summary-badge critical" style={{background: getSeverityColor('CRITICAL')}}>
+                  {scanResult.summary.critical || 0} Critical
+                </span>
+                <span className="summary-badge high" style={{background: getSeverityColor('HIGH')}}>
+                  {scanResult.summary.high || 0} High
+                </span>
+                <span className="summary-badge medium" style={{background: getSeverityColor('MEDIUM')}}>
+                  {scanResult.summary.medium || 0} Medium
+                </span>
+                <span className="summary-badge low" style={{background: getSeverityColor('LOW')}}>
+                  {scanResult.summary.low || 0} Low
+                </span>
+              </div>
+
+              {/* Vulnerabilities List */}
+              {vulnerabilities.length > 0 && (
+                <div className="vuln-list">
+                  <div className="vuln-list-header">
+                    <h4>Found {vulnerabilities.length} Vulnerabilities</h4>
+                    {vulnerabilities.length > 10 && (
+                      <button
+                        onClick={() => setShowAllVulns(!showAllVulns)}
+                        className="btn-show-more"
+                      >
+                        {showAllVulns ? 'Show Less' : `Show More (${vulnerabilities.length - 10} more)`}
+                      </button>
+                    )}
+                  </div>
+
+                  {displayedVulns.map((vuln: any) => (
+                    <div key={vuln.id} className="vuln-item">
+                      <div
+                        className="vuln-item-header"
+                        onClick={() => setExpandedVuln(expandedVuln === vuln.id ? null : vuln.id)}
+                      >
+                        <div className="vuln-item-left">
+                          <span
+                            className="vuln-severity"
+                            style={{background: getSeverityColor(vuln.severity)}}
+                          >
+                            {vuln.severity}
+                          </span>
+                          <span className="vuln-id">{vuln.id}</span>
+                        </div>
+                        <div className="vuln-item-right">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedVuln(vuln) }}
+                            className="btn-details"
+                          >
+                            Details <ExternalLink className="w-3 h-3" />
+                          </button>
+                          <span className="vuln-arrow">
+                            {expandedVuln === vuln.id ? '▼' : '▶'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {expandedVuln === vuln.id && (
+                        <div className="vuln-item-details">
+                          <p className="vuln-title">{vuln.title}</p>
+                          {vuln.description && (
+                            <div className="vuln-desc-section">
+                              <strong>Description:</strong>
+                              <p>{vuln.description}</p>
+                            </div>
+                          )}
+                          {vuln.fix && (
+                            <div className="vuln-fix-section">
+                              <strong>Fix:</strong>
+                              <p>{vuln.fix}</p>
+                            </div>
+                          )}
+                          {vuln.references && vuln.references.length > 0 && (
+                            <div className="vuln-refs">
+                              <strong>References:</strong>
+                              <ul>
+                                {vuln.references.slice(0, 3).map((ref: string, i: number) => (
+                                  <li key={i}><a href={ref} target="_blank" rel="noopener noreferrer">{ref}</a></li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* No vulnerabilities */}
+              {vulnerabilities.length === 0 && (
+                <div className="vuln-success">
+                  <span>✅</span>
+                  <span>No vulnerabilities found!</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-muted">Scan completed. No detailed results available.</p>
+          )}
+        </div>
+      )}
+
+      {/* Vulnerability Detail Modal */}
+      {selectedVuln && (
+        <div className="modal-overlay" onClick={() => setSelectedVuln(null)}>
+          <div className="modal-content vuln-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="vuln-modal-title">
+                <span
+                  className="vuln-severity-large"
+                  style={{background: getSeverityColor(selectedVuln.severity)}}
+                >
+                  {selectedVuln.severity}
+                </span>
+                <h3>{selectedVuln.id}</h3>
+              </div>
+              <button onClick={() => setSelectedVuln(null)} className="btn-close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="vuln-severity-desc">
+                {getSeverityLabel(selectedVuln.severity)}
+              </div>
+              
+              <div className="vuln-detail-section">
+                <h4>Title</h4>
+                <p>{selectedVuln.title}</p>
+              </div>
+
+              {selectedVuln.description && (
+                <div className="vuln-detail-section">
+                  <h4>Description</h4>
+                  <p>{selectedVuln.description}</p>
+                </div>
+              )}
+
+              {selectedVuln.fix && (
+                <div className="vuln-detail-section">
+                  <h4>Recommended Fix</h4>
+                  <p>{selectedVuln.fix}</p>
+                </div>
+              )}
+
+              {selectedVuln.references && selectedVuln.references.length > 0 && (
+                <div className="vuln-detail-section">
+                  <h4>References</h4>
+                  <ul className="vuln-refs-list">
+                    {selectedVuln.references.map((ref: string, i: number) => (
+                      <li key={i}>
+                        <a href={ref} target="_blank" rel="noopener noreferrer">
+                          {ref} <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface SystemInfo {
   system: { hostname: string; uptime: number; boot_time: number }
@@ -18,14 +632,16 @@ interface ProgressBarMetricProps {
   value: number
   unit: string
   color: string
+  onClick?: () => void
+  icon?: React.ReactNode
 }
 
-function ProgressBarMetric({ title, value, unit, color }: ProgressBarMetricProps) {
+function ProgressBarMetric({ title, value, unit, color, onClick, icon }: ProgressBarMetricProps) {
   const percentage = Math.min(100, Math.max(0, value))
   return (
-    <div className="metric-card">
+    <div className={`metric-card ${onClick ? 'metric-card-clickable' : ''}`} onClick={onClick}>
       <div className="metric-header">
-        <span className="metric-title">{title}</span>
+        <span className="metric-title">{icon} {title}</span>
         <span className="metric-value">{value.toFixed(1)}{unit}</span>
       </div>
       <div className="metric-bar-container">
@@ -37,6 +653,91 @@ function ProgressBarMetric({ title, value, unit, color }: ProgressBarMetricProps
           }}
         />
       </div>
+      {onClick && <div className="metric-click-hint">Click for details</div>}
+    </div>
+  )
+}
+
+// Компонент для отображения графика метрик
+const MetricChartModal: React.FC<{
+  title: string
+  data: MetricHistory[]
+  type: 'cpu' | 'memory'
+  onClose: () => void
+}> = ({ title, data, type, onClose }) => {
+  const maxValue = 100
+  const values = type === 'cpu' 
+    ? data.map(d => d.cpu) 
+    : data.map(d => d.memory)
+  
+  const formatTime = (ts: number) => {
+    const date = new Date(ts * 1000)
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
+  const max = values.length > 0 ? Math.max(...values) : 0
+  const min = values.length > 0 ? Math.min(...values) : 0
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content metric-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="metric-modal-title">
+            {type === 'cpu' ? <Cpu className="w-5 h-5" /> : <MemoryStick className="w-5 h-5" />}
+            <h3>{title}</h3>
+          </div>
+          <button onClick={onClose} className="btn-close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="modal-body">
+          {/* Stats Summary */}
+          <div className="metric-stats-summary">
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Current</span>
+              <span className="metric-stat-value">{values[values.length - 1]?.toFixed(1) || 0}%</span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Average</span>
+              <span className="metric-stat-value">{avg.toFixed(1)}%</span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Max</span>
+              <span className="metric-stat-value">{max.toFixed(1)}%</span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Min</span>
+              <span className="metric-stat-value">{min.toFixed(1)}%</span>
+            </div>
+          </div>
+
+          {/* Chart */}
+          <div className="metric-chart-container">
+            <div className="metric-chart">
+              {data.length > 0 ? (
+                data.map((d, i) => (
+                  <div
+                    key={i}
+                    className="metric-chart-bar"
+                    style={{
+                      height: `${(type === 'cpu' ? d.cpu : d.memory) / maxValue * 100}%`,
+                      backgroundColor: type === 'cpu' ? '#a78bfa' : '#8b5cf6'
+                    }}
+                    title={`${(type === 'cpu' ? d.cpu : d.memory).toFixed(1)}% at ${formatTime(d.timestamp)}`}
+                  />
+                ))
+              ) : (
+                <div className="metric-chart-empty">No data available</div>
+              )}
+            </div>
+            <div className="metric-chart-labels">
+              <span>{formatTime(data[0]?.timestamp)}</span>
+              <span>{formatTime(data[data.length - 1]?.timestamp)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -44,7 +745,16 @@ function ProgressBarMetric({ title, value, unit, color }: ProgressBarMetricProps
 const AppLight: React.FC = () => {
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null)
   const [dockerStats, setDockerStats] = useState<any>(null)
+  const [agentMetrics, setAgentMetrics] = useState<Record<string, any>>({})
+  const [agentsList, setAgentsList] = useState<string[]>([])
+  const [agentsLoading, setAgentsLoading] = useState(true)
+  const [showAgents, setShowAgents] = useState(true)
   const [loading, setLoading] = useState(true)
+
+  // History for CPU and Memory charts
+  const [metricHistory, setMetricHistory] = useState<MetricHistory[]>([])
+  const [showCpuChart, setShowCpuChart] = useState(false)
+  const [showMemoryChart, setShowMemoryChart] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -55,9 +765,36 @@ const AppLight: React.FC = () => {
           axios.get(`${API_BASE}/system`),
           axios.get(`${API_BASE}/docker/metrics`)
         ])
+        // fetch agent metrics separately (via helper)
+        try {
+          const agents = await api.getAgentMetrics()
+          setAgentMetrics(agents || {})
+          const ids = Object.keys(agents || {})
+          setAgentsList(ids)
+          setAgentsLoading(false)
+        } catch (e) {
+          console.error('Error fetching agent metrics:', e)
+          setAgentsLoading(false)
+        }
         if (!mounted) return
-        setSysInfo(sysResp.data || null)
+        
+        const sysData = sysResp.data
+        setSysInfo(sysData || null)
         setDockerStats(dockerResp.data || null)
+        
+        // Add to history
+        if (sysData?.cpu?.percent !== undefined && sysData?.memory?.percent !== undefined) {
+          setMetricHistory(prev => {
+            const newEntry: MetricHistory = {
+              cpu: sysData.cpu.percent,
+              memory: sysData.memory.percent,
+              timestamp: Date.now() / 1000
+            }
+            const updated = [...prev, newEntry]
+            // Keep last 30 entries (about 2.5 minutes of data)
+            return updated.slice(-30)
+          })
+        }
       } catch (err) {
         console.error('Light app fetch error', err)
       } finally {
@@ -126,13 +863,17 @@ const AppLight: React.FC = () => {
                       value={sysInfo.cpu?.percent || 0}
                       unit="%"
                       color="#a78bfa"
+                      onClick={() => setShowCpuChart(true)}
+                      icon={<Cpu className="w-4 h-4" />}
                     />
 
                     <ProgressBarMetric
                       title="Memory"
                       value={sysInfo.memory?.percent || 0}
                       unit="%"
-                      color="#a78bfa"
+                      color="#8b5cf6"
+                      onClick={() => setShowMemoryChart(true)}
+                      icon={<MemoryStick className="w-4 h-4" />}
                     />
 
                     <div className="metric-card">
@@ -183,6 +924,41 @@ const AppLight: React.FC = () => {
               </div>
               <DockerDashboardLight data={dockerStats} />
             </section>
+
+            {/* Vulnerability Scanner - Light */}
+            <section className="docker-section">
+              <div className="section-header">
+                <h2 className="section-title">Image Vulnerability Scanner</h2>
+              </div>
+              <VulnerabilityScannerLight />
+            </section>
+
+            {/* Monitoring Agents Section - Light */}
+            <section className="metrics-section">
+              <div className="section-header">
+                <h2 className="section-title">Monitoring Agents</h2>
+                <button onClick={() => setShowAgents(!showAgents)} className="btn btn-sm">
+                  {showAgents ? 'Hide' : 'Show'}
+                </button>
+              </div>
+
+              {showAgents && (
+                <div className="agents-grid">
+                  {agentsLoading ? (
+                    <div className="metric-card"><div className="skeleton" style={{height: 80}} /></div>
+                  ) : agentsList.length > 0 ? (
+                    agentsList.map((agentId) => (
+                      <AgentMetricsLight key={agentId} agentId={agentId} initialMetrics={agentMetrics[agentId]} />
+                    ))
+                  ) : (
+                    <div className="empty-state">
+                      <Activity className="w-6 h-6" />
+                      <p>No agents connected</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
           </>
         )}
       </main>
@@ -190,6 +966,26 @@ const AppLight: React.FC = () => {
       <footer className="app-footer">
         <p>InfraWatch — System & Container Monitoring</p>
       </footer>
+
+      {/* CPU Chart Modal */}
+      {showCpuChart && (
+        <MetricChartModal
+          title="CPU Usage"
+          data={metricHistory}
+          type="cpu"
+          onClose={() => setShowCpuChart(false)}
+        />
+      )}
+
+      {/* Memory Chart Modal */}
+      {showMemoryChart && (
+        <MetricChartModal
+          title="Memory Usage"
+          data={metricHistory}
+          type="memory"
+          onClose={() => setShowMemoryChart(false)}
+        />
+      )}
     </div>
   )
 }

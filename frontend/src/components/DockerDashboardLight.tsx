@@ -126,14 +126,14 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
     }
   };
 
-  const handleDeleteNetwork = async (networkName: string) => {
-    if (!window.confirm(`Delete network "${networkName}"? This action cannot be undone.`)) return;
+  const handleDeleteNetwork = async (networkIdOrName: string) => {
+    if (!window.confirm(`Delete network "${networkIdOrName}"? This action cannot be undone.`)) return;
     setIsRefreshing(true);
     try {
-      const response = await axios.delete(`http://localhost:8000/api/v1/docker/network/${encodeURIComponent(networkName)}`);
+      const response = await axios.delete(`http://localhost:8000/api/v1/docker/network/${encodeURIComponent(networkIdOrName)}`);
       if (response.data.status === 'success') {
         setActionMessage({
-          text: `Network "${networkName}" deleted successfully!`,
+          text: `Network "${networkIdOrName}" deleted successfully!`,
           type: 'success',
         });
         setTimeout(() => window.location.reload(), 1500);
@@ -433,9 +433,11 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
                     <div className="image-name">{image.repo_tags?.[0] || image.id.substring(0, 20)}</div>
                     <button
                       onClick={() => handleDeleteImage(image.id)}
-                      className="btn btn-danger btn-sm"
+                      className="btn-delete-red"
                       disabled={isRefreshing}
+                      title="Delete image"
                     >
+                      <Trash2 className="w-3.5 h-3.5" />
                       Delete
                     </button>
                   </div>
@@ -473,7 +475,20 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
                 <div key={network.name} className="network-card">
                   <div className="network-header">
                     <h4>{network.name}</h4>
-                    <span className="network-type">{network.driver}</span>
+                    <div className="network-header-right">
+                      <span className="network-type">{network.driver}</span>
+                      <div className="network-header-actions">
+                        <button
+                          onClick={() => handleDeleteNetwork(network.id || network.name)}
+                          className="btn-delete-red"
+                          title="Delete network"
+                          aria-label={`Delete network ${network.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <div className="network-details">
                     <div className="detail-item">
@@ -489,16 +504,7 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
                       <span className="detail-value">{network.scope || 'local'}</span>
                     </div>
                   </div>
-                  <div className="network-actions">
-                    <button
-                      onClick={() => handleDeleteNetwork(network.name)}
-                      className="action-btn delete-btn"
-                      title="Delete network"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
-                  </div>
+                  {/* delete button moved to header for visibility */}
                 </div>
               ))}
             </div>

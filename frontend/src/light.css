@@ -589,6 +589,10 @@
     @apply px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-medium;
   }
 
+  .network-header-right {
+    @apply flex items-center gap-3;
+  }
+
   .network-details {
     @apply space-y-2;
   }
@@ -725,7 +729,8 @@
   }
 
   /* Volume Actions */
-  .volume-actions {
+  .volume-actions
+  .network-actions {
     @apply flex gap-2 pt-3 border-t border-slate-700;
   }
 
@@ -741,4 +746,586 @@
   .delete-btn {
     @apply bg-red-500/20 text-red-400 hover:bg-red-500/30;
   }
+
+  .delete-btn-visible {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+}
+
+/* Network header delete button */
+.network-header-actions {
+  @apply flex items-center justify-end gap-2;
+}
+
+/* Light Version - Vulnerability Scanner */
+.vuln-scanner-light {
+  @apply bg-slate-800/50 border border-slate-700 rounded-xl p-5;
+}
+
+.vuln-header {
+  @apply flex items-center gap-3 mb-5 pb-4 border-b border-slate-700;
+  color: var(--text-primary);
+}
+
+.vuln-header svg {
+  @apply w-5 h-5 text-purple-400;
+}
+
+.vuln-header span {
+  @apply font-semibold text-lg flex-1;
+}
+
+.btn-refresh {
+  @apply p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors;
+}
+
+.vuln-images {
+  @apply space-y-2;
+}
+
+.vuln-image-card {
+  @apply flex items-center justify-between p-3 bg-slate-700/30 rounded-lg border border-slate-600;
+}
+
+.vuln-image-info {
+  @apply flex flex-col;
+}
+
+.vuln-image-name {
+  @apply font-medium text-slate-200 text-sm;
+}
+
+.vuln-image-size {
+  @apply text-xs text-slate-400;
+}
+
+.btn-scan {
+  @apply px-4 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50;
+}
+
+.vuln-result {
+  @apply mt-5 pt-4 border-t border-slate-700;
+}
+
+.vuln-summary {
+  @apply flex gap-2 flex-wrap;
+}
+
+.summary-badge {
+  @apply px-3 py-1.5 rounded-lg text-white text-xs font-semibold;
+}
+
+.text-error {
+  @apply text-red-400;
+}
+
+.text-success {
+  @apply text-green-400;
+}
+
+.text-muted {
+  @apply text-slate-400;
+}
+
+/* Light Version - Agent Metrics */
+.agents-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-4;
+}
+
+.agent-card {
+  @apply bg-slate-800/50 border border-slate-700 rounded-xl p-5 transition-all duration-300 hover:border-purple-400;
+}
+
+.agent-header {
+  @apply flex items-center gap-2 mb-4 pb-3 border-b border-slate-700;
+}
+
+.agent-header svg {
+  @apply w-4 h-4 text-purple-400;
+}
+
+.agent-hostname {
+  @apply font-semibold text-slate-100;
+}
+
+.agent-id {
+  @apply text-xs text-slate-400;
+}
+
+.agent-stats {
+  @apply grid grid-cols-3 gap-3;
+}
+
+.stat {
+  @apply flex flex-col items-center text-center;
+}
+
+.stat-label {
+  @apply text-xs text-slate-400 mb-1;
+}
+
+.stat-value {
+  @apply text-lg font-bold text-purple-400;
+}
+
+/* Skeleton loader */
+.skeleton {
+  @apply bg-slate-700/50 rounded animate-pulse;
+}
+
+/* Button styles for light version */
+.section-header {
+  @apply flex items-center justify-between mb-6;
+}
+
+.section-header .section-title {
+  @apply text-2xl font-semibold text-slate-100;
+}
+
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 cursor-pointer border-none;
+}
+
+.btn-sm {
+  @apply px-3 py-1.5 text-xs bg-slate-700 text-slate-300 hover:bg-slate-600;
+}
+
+.empty-state {
+  @apply flex flex-col items-center justify-center py-8 text-slate-400;
+}
+
+.empty-state svg {
+  @apply w-6 h-6 mb-2 opacity-50;
+}
+
+.empty-state p {
+  @apply text-sm;
+}
+
+/* ========== AGENT METRICS LIGHT - STYLES ========== */
+.agent-card {
+  @apply bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden transition-all duration-300;
+}
+
+.agent-card:hover {
+  @apply border-purple-400;
+}
+
+.agent-header-clickable {
+  @apply p-4 cursor-pointer flex items-center justify-between hover:bg-slate-700/30 transition-colors;
+}
+
+.agent-header {
+  @apply flex items-center gap-3;
+}
+
+.agent-info {
+  @apply flex flex-col;
+}
+
+.agent-header svg {
+  @apply w-5 h-5 text-purple-400;
+}
+
+.agent-hostname {
+  @apply font-semibold text-slate-100;
+}
+
+.agent-id {
+  @apply text-xs text-slate-400;
+}
+
+.agent-header-right {
+  @apply flex items-center gap-3;
+}
+
+.agent-uptime {
+  @apply text-sm text-slate-400;
+}
+
+.agent-quick-stats {
+  @apply flex gap-4 px-4 pb-4;
+}
+
+.quick-stat {
+  @apply flex items-center gap-1.5 text-sm text-slate-300;
+}
+
+.quick-stat svg {
+  @apply w-3 h-3 text-purple-400;
+}
+
+/* Expanded Details */
+.agent-details {
+  @apply border-t border-slate-700 p-4 space-y-4 bg-slate-800/30;
+}
+
+.detail-section h4 {
+  @apply text-sm font-semibold text-slate-300 mb-3;
+}
+
+.detail-grid {
+  @apply grid grid-cols-2 gap-2;
+}
+
+.detail-item {
+  @apply flex flex-col;
+}
+
+.detail-item .detail-label {
+  @apply text-xs text-slate-500;
+}
+
+.detail-item .detail-value {
+  @apply text-sm text-slate-200;
+}
+
+/* Disks */
+.disks-list {
+  @apply space-y-2;
+}
+
+.disk-item {
+  @apply flex items-center gap-3;
+}
+
+.disk-mount {
+  @apply text-sm text-slate-300 w-24 truncate;
+}
+
+.disk-bar-wrap {
+  @apply flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden;
+}
+
+.disk-bar {
+  @apply h-full bg-purple-500 rounded-full transition-all;
+}
+
+.disk-percent {
+  @apply text-xs text-slate-400 w-12 text-right;
+}
+
+/* Docker Stats Mini */
+.docker-stats-mini {
+  @apply flex gap-4;
+}
+
+.docker-stat-mini {
+  @apply text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded;
+}
+
+/* CPU History Chart */
+.cpu-history-chart {
+  @apply flex items-end gap-1 h-16;
+}
+
+.history-bar {
+  @apply flex-1 bg-gradient-to-t from-purple-500 to-purple-400 rounded-t transition-all hover:opacity-80;
+}
+
+/* Processes */
+.processes-header {
+  @apply flex items-center justify-between mb-3;
+}
+
+.processes-header h4 {
+  @apply text-sm font-semibold text-slate-300 mb-0;
+}
+
+.process-controls {
+  @apply flex gap-2;
+}
+
+.sort-select {
+  @apply bg-slate-700 border border-slate-600 text-slate-300 text-xs rounded px-2 py-1;
+}
+
+.btn-sort {
+  @apply p-1.5 bg-slate-700 border border-slate-600 rounded text-slate-400 hover:text-purple-400 hover:border-purple-400 transition-colors;
+}
+
+.processes-list {
+  @apply space-y-2;
+}
+
+.process-item {
+  @apply flex items-center justify-between p-2.5 bg-slate-700/30 border border-slate-600 rounded-lg cursor-pointer hover:bg-slate-700/50 hover:border-purple-400/50 transition-all;
+}
+
+.process-info {
+  @apply flex flex-col;
+}
+
+.process-name {
+  @apply text-sm text-slate-200 font-medium;
+}
+
+.process-pid {
+  @apply text-xs text-slate-500;
+}
+
+.process-stats {
+  @apply flex items-center gap-3;
+}
+
+.process-cpu {
+  @apply text-xs text-slate-400;
+}
+
+.process-cpu.high {
+  @apply text-red-400;
+}
+
+.process-mem {
+  @apply text-xs text-slate-400;
+}
+
+.btn-stop-process {
+  @apply p-1.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors disabled:opacity-50;
+}
+
+.btn-view-all {
+  @apply w-full mt-3 py-2 text-sm text-purple-400 hover:text-purple-300 bg-slate-700/30 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center justify-center gap-2;
+}
+
+/* ========== MODAL STYLES ========== */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4;
+}
+
+.modal-content {
+  @apply bg-slate-800 border border-slate-700 rounded-xl max-w-md w-full max-h-[80vh] overflow-hidden;
+}
+
+.modal-header {
+  @apply flex items-center justify-between p-4 border-b border-slate-700;
+}
+
+.modal-header h3 {
+  @apply text-lg font-semibold text-slate-100;
+}
+
+.btn-close {
+  @apply p-1.5 rounded-lg bg-slate-700 text-slate-400 hover:text-white hover:bg-slate-600 transition-colors;
+}
+
+.modal-body {
+  @apply p-4 overflow-y-auto max-h-[60vh];
+}
+
+.modal-actions {
+  @apply mt-4 pt-4 border-t border-slate-700;
+}
+
+.btn-stop-process-large {
+  @apply w-full py-2.5 rounded-lg bg-red-500 text-white font-medium flex items-center justify-center gap-2 hover:bg-red-600 transition-colors disabled:opacity-50;
+}
+
+/* ========== VULNERABILITY SCANNER - EXTENDED STYLES ========== */
+.vuln-result {
+  @apply mt-5 pt-4 border-t border-slate-700;
+}
+
+.vuln-error {
+  @apply flex items-center gap-2 text-red-400;
+}
+
+.vuln-success {
+  @apply flex items-center gap-2 text-green-400 py-4;
+}
+
+.vuln-list {
+  @apply mt-4 space-y-2;
+}
+
+.vuln-list-header {
+  @apply flex items-center justify-between mb-3;
+}
+
+.vuln-list-header h4 {
+  @apply text-sm font-semibold text-slate-300;
+}
+
+.btn-show-more {
+  @apply text-xs text-purple-400 hover:text-purple-300 transition-colors;
+}
+
+.vuln-item {
+  @apply bg-slate-700/30 border border-slate-600 rounded-lg overflow-hidden;
+}
+
+.vuln-item-header {
+  @apply flex items-center justify-between p-3 cursor-pointer hover:bg-slate-700/50 transition-colors;
+}
+
+.vuln-item-left {
+  @apply flex items-center gap-3;
+}
+
+.vuln-severity {
+  @apply px-2 py-0.5 rounded text-xs font-semibold text-white;
+}
+
+.vuln-id {
+  @apply text-sm text-slate-300 font-mono;
+}
+
+.vuln-item-right {
+  @apply flex items-center gap-3;
+}
+
+.btn-details {
+  @apply flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors;
+}
+
+.vuln-arrow {
+  @apply text-xs text-slate-500;
+}
+
+.vuln-item-details {
+  @apply p-3 pt-0 border-t border-slate-600/50 space-y-3;
+}
+
+.vuln-title {
+  @apply text-sm text-slate-200 font-medium;
+}
+
+.vuln-desc-section,
+.vuln-fix-section {
+  @apply text-sm;
+}
+
+.vuln-desc-section strong,
+.vuln-fix-section strong,
+.vuln-refs strong {
+  @apply text-slate-400 text-xs block mb-1;
+}
+
+.vuln-desc-section p,
+.vuln-fix-section p {
+  @apply text-slate-300 text-xs leading-relaxed;
+}
+
+.vuln-refs ul {
+  @apply list-disc list-inside space-y-1;
+}
+
+.vuln-refs a {
+  @apply text-purple-400 hover:text-purple-300 text-xs break-all;
+}
+
+/* Vulnerability Modal */
+.vuln-modal {
+  @apply max-w-lg;
+}
+
+.vuln-modal-title {
+  @apply flex items-center gap-3;
+}
+
+.vuln-severity-large {
+  @apply px-3 py-1 rounded-lg text-sm font-semibold text-white;
+}
+
+.vuln-severity-desc {
+  @apply text-sm text-slate-400 mb-4 pb-4 border-b border-slate-700;
+}
+
+.vuln-detail-section {
+  @apply mb-4;
+}
+
+.vuln-detail-section h4 {
+  @apply text-sm font-semibold text-slate-300 mb-2;
+}
+
+.vuln-detail-section p {
+  @apply text-sm text-slate-400 leading-relaxed;
+}
+
+.vuln-refs-list {
+  @apply space-y-2;
+}
+
+.vuln-refs-list li a {
+  @apply flex items-center gap-2 text-purple-400 hover:text-purple-300 text-sm;
+}
+
+/* ========== RED DELETE BUTTONS ========== */
+.btn-delete-red {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-medium hover:bg-red-500/40 hover:border-red-400 transition-all;
+}
+
+.btn-delete-red:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* ========== CLICKABLE METRIC CARDS ========== */
+.metric-card-clickable {
+  @apply cursor-pointer;
+}
+
+.metric-card-clickable:hover {
+  @apply border-purple-400 bg-slate-800;
+}
+
+.metric-click-hint {
+  @apply text-xs text-slate-500 mt-2 text-center opacity-0 transition-opacity;
+}
+
+.metric-card-clickable:hover .metric-click-hint {
+  @apply opacity-100;
+}
+
+/* ========== METRIC CHART MODAL ========== */
+.metric-modal {
+  @apply max-w-lg;
+}
+
+.metric-modal-title {
+  @apply flex items-center gap-3;
+}
+
+.metric-modal-title svg {
+  @apply w-5 h-5 text-purple-400;
+}
+
+.metric-modal-title h3 {
+  @apply text-lg font-semibold text-slate-100;
+}
+
+.metric-stats-summary {
+  @apply grid grid-cols-4 gap-3 mb-6;
+}
+
+.metric-stat-box {
+  @apply flex flex-col items-center p-3 bg-slate-700/30 rounded-lg;
+}
+
+.metric-stat-label {
+  @apply text-xs text-slate-500 mb-1;
+}
+
+.metric-stat-value {
+  @apply text-lg font-bold text-purple-400;
+}
+
+.metric-chart-container {
+  @apply mt-4;
+}
+
+.metric-chart {
+  @apply flex items-end gap-1 h-40 bg-slate-700/30 rounded-lg p-4;
+}
+
+.metric-chart-bar {
+  @apply flex-1 rounded-t transition-all hover:opacity-80;
+}
+
+.metric-chart-empty {
+  @apply w-full h-full flex items-center justify-center text-slate-500;
+}
+
+.metric-chart-labels {
+  @apply flex justify-between mt-2 text-xs text-slate-500;
 }

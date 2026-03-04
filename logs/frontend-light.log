@@ -1,3 +1,19 @@
-::1 - - [03/Mar/2026 20:04:52] "GET / HTTP/1.1" 200 -
-::1 - - [03/Mar/2026 20:04:52] "GET /assets/light-qF8P9OL2.js HTTP/1.1" 200 -
-::1 - - [03/Mar/2026 20:04:52] "GET /assets/light-DrIpCCWP.css HTTP/1.1" 200 -
+
+> infrawatch-frontend@1.0.0 dev:light
+> vite --config vite.light.config.ts
+
+
+  VITE v5.4.21  ready in 2604 ms
+
+  ➜  Local:   http://localhost:5176/
+  ➜  Network: http://192.168.31.22:5176/
+  ➜  Network: http://10.10.0.190:5176/
+11:50:14 AM [vite] hmr update /src/components/DockerDashboardLight.tsx, /src/light.css
+11:51:09 AM [vite] hmr update /src/components/DockerDashboardLight.tsx, /src/light.css
+11:51:49 AM [vite] hmr update /src/light.css
+11:53:01 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+11:54:05 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+11:55:10 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+11:56:08 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+11:57:03 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+11:57:58 AM [vite] hmr update /src/light.css

@@ -1102,6 +1102,24 @@ async def delete_docker_volume(volume_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting volume: {str(e)}")
 
+
+@app.delete("/api/v1/docker/network/{network_id}")
+async def delete_docker_network(network_id: str):
+    """Delete a Docker network by ID or name"""
+    try:
+        # Docker SDK allows get by id or name
+        net = docker_client.networks.get(network_id)
+        net.remove()
+        return {
+            "status": "success",
+            "action": "delete",
+            "resource_type": "network",
+            "network_id": network_id,
+            "message": f"Network {network_id} deleted successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting network: {str(e)}")
+
 @app.get("/api/v1/docker/image/{image_id}/vulnerabilities")
 async def scan_image_vulnerabilities(image_id: str):
     """
