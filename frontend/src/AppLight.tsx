@@ -658,7 +658,7 @@ function ProgressBarMetric({ title, value, unit, color, onClick, icon }: Progres
   )
 }
 
-// Компонент для отображения графика метрик
+// Компонент для отображения графика метрик (ломаная линия с градиентом)
 const MetricChartModal: React.FC<{
   title: string
   data: MetricHistory[]
@@ -672,16 +672,74 @@ const MetricChartModal: React.FC<{
   
   const formatTime = (ts: number) => {
     const date = new Date(ts * 1000)
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
   }
 
   const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
   const max = values.length > 0 ? Math.max(...values) : 0
   const min = values.length > 0 ? Math.min(...values) : 0
 
+  // Generate polyline path (sharp vertices, no smoothing)
+  const generatePolylinePath = (): string => {
+    if (values.length < 2) return ''
+    
+    const width = 100
+    const height = 80
+    const padding = 8
+    const effectiveWidth = width - padding * 2
+    const effectiveHeight = height - padding * 2
+    
+    const points = values.map((v, i) => {
+      const x = padding + (i / (values.length - 1)) * effectiveWidth
+      const y = padding + effectiveHeight - (v / maxValue * effectiveHeight)
+      return { x, y }
+    })
+    
+    // Create polyline with sharp corners (L = line to)
+    let path = `M ${points[0].x},${points[0].y}`
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x},${points[i].y}`
+    }
+    
+    return path
+  }
+
+  // Generate area fill path
+  const generateAreaPath = (): string => {
+    if (values.length < 2) return ''
+    
+    const width = 100
+    const height = 80
+    const padding = 8
+    const effectiveWidth = width - padding * 2
+    const effectiveHeight = height - padding * 2
+    
+    const points = values.map((v, i) => {
+      const x = padding + (i / (values.length - 1)) * effectiveWidth
+      const y = padding + effectiveHeight - (v / maxValue * effectiveHeight)
+      return { x, y }
+    })
+    
+    let path = `M ${padding},${height - padding}`
+    path += ` L ${points[0].x},${points[0].y}`
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x},${points[i].y}`
+    }
+    path += ` L ${width - padding},${height - padding} Z`
+    
+    return path
+  }
+
+  // Get color based on value
+  const getColor = (val: number) => {
+    if (val < 40) return '#22c55e'
+    if (val < 70) return '#eab308'
+    return '#ef4444'
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content metric-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-content metric-modal metric-modal-large" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <div className="metric-modal-title">
             {type === 'cpu' ? <Cpu className="w-5 h-5" /> : <MemoryStick className="w-5 h-5" />}
@@ -712,29 +770,102 @@ const MetricChartModal: React.FC<{
             </div>
           </div>
 
-          {/* Chart */}
-          <div className="metric-chart-container">
-            <div className="metric-chart">
-              {data.length > 0 ? (
-                data.map((d, i) => (
-                  <div
-                    key={i}
-                    className="metric-chart-bar"
-                    style={{
-                      height: `${(type === 'cpu' ? d.cpu : d.memory) / maxValue * 100}%`,
-                      backgroundColor: type === 'cpu' ? '#a78bfa' : '#8b5cf6'
-                    }}
-                    title={`${(type === 'cpu' ? d.cpu : d.memory).toFixed(1)}% at ${formatTime(d.timestamp)}`}
+          {/* XY Line Chart - Polyline with fine grid */}
+          <div style={{ display: 'flex', marginBottom: '8px' }}>
+            {/* Y-axis labels (left side, vertical) */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'space-between',
+              paddingRight: '8px',
+              fontSize: '11px',
+              fontFamily: 'monospace'
+            }}>
+              <span style={{color: getColor(100)}}>100%</span>
+              <span style={{color: getColor(75)}}>75%</span>
+              <span style={{color: getColor(50)}}>50%</span>
+              <span style={{color: getColor(25)}}>25%</span>
+              <span style={{color: getColor(0)}}>0%</span>
+            </div>
+            
+            {/* Chart area */}
+            <div style={{ flex: 1, height: '200px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', padding: '8px' }}>
+              <svg viewBox="0 0 100 80" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                <defs>
+                  <linearGradient id="polyGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                    <stop offset="0%" stopColor="#22c55e" />
+                    <stop offset="50%" stopColor="#eab308" />
+                    <stop offset="100%" stopColor="#ef4444" />
+                  </linearGradient>
+                </defs>
+                
+                {/* Fine grid - horizontal lines every 10 units */}
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(y => (
+                  <line 
+                    key={`h-${y}`} 
+                    x1="0" y1={y} x2="100" y2={y} 
+                    stroke="rgba(51,65,85,0.3)" 
+                    strokeWidth="0.2" 
                   />
-                ))
-              ) : (
-                <div className="metric-chart-empty">No data available</div>
-              )}
+                ))}
+                
+                {/* Fine grid - vertical lines every 10 units */}
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(x => (
+                  <line 
+                    key={`v-${x}`} 
+                    x1={x} y1="0" x2={x} y2="80" 
+                    stroke="rgba(51,65,85,0.2)" 
+                    strokeWidth="0.1"
+                  />
+                ))}
+                
+                {/* Main horizontal grid lines */}
+                {[0, 25, 50, 75, 100].map(y => (
+                  <line 
+                    key={`hm-${y}`} 
+                    x1="0" y1={y} x2="100" y2={y} 
+                    stroke="rgba(51,65,85,0.5)" 
+                    strokeWidth="0.3"
+                  />
+                ))}
+                
+                {/* Main vertical grid lines */}
+                {[0, 25, 50, 75, 100].map(x => (
+                  <line 
+                    key={`vm-${x}`} 
+                    x1={x} y1="0" x2={x} y2="80" 
+                    stroke="rgba(51,65,85,0.3)" 
+                    strokeWidth="0.2"
+                  />
+                ))}
+                
+                {/* Polyline - thin line */}
+                {values.length > 1 && (
+                  <path 
+                    d={generatePolylinePath()} 
+                    fill="none" 
+                    stroke="url(#polyGradient)" 
+                    strokeWidth="1"
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
+                  />
+                )}
+              </svg>
             </div>
-            <div className="metric-chart-labels">
-              <span>{formatTime(data[0]?.timestamp)}</span>
-              <span>{formatTime(data[data.length - 1]?.timestamp)}</span>
-            </div>
+          </div>
+          
+          {/* X-axis labels (time) */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            marginLeft: '32px',
+            fontSize: '11px', 
+            color: '#94a3b8',
+            padding: '0 4px'
+          }}>
+            <span>{data[0] ? formatTime(data[0].timestamp) : '--:--'}</span>
+            <span>{data.length > 1 ? formatTime(data[Math.floor(data.length / 2)].timestamp) : '--:--'}</span>
+            <span>{data[data.length - 1] ? formatTime(data[data.length - 1].timestamp) : '--:--'}</span>
           </div>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
 
-const projectRoot = path.resolve(__dirname)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 export default defineConfig({
   plugins: [react()],
@@ -14,15 +16,15 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        secure: false, 
+        secure: false
       }
     }
   },
   build: {
     rollupOptions: {
       input: {
-        main: path.resolve(projectRoot, 'light-index.html'),
-        light: path.resolve(projectRoot, 'light.html')
+        main: path.resolve(__dirname, 'light-index.html'),
+        light: path.resolve(__dirname, 'light.html')
       }
     }
   }

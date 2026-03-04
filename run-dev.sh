@@ -110,6 +110,7 @@ echo -e "${YELLOW}Cleaning up existing processes...${NC}"
 check_port 8000
 check_port 5173
 check_port 5176
+check_port 5176
 pkill -f "uvicorn" || true
 pkill -f "vite" || true
 
@@ -178,7 +179,7 @@ for i in {1..30}; do
     sleep 1
 done
 
-# Start Frontend
+# Start Frontend (main)
 echo -e "\n${CYAN}=== Starting Frontend (Vite) ===${NC}"
 echo -e "${GREEN}URL: http://localhost:5173${NC}"
 cd frontend
@@ -188,49 +189,13 @@ if [ ! -d "node_modules" ]; then
 fi
 npm run dev > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
+
+# Start Frontend Light on port 5176
+echo -e "\n${CYAN}=== Starting Frontend Light (Vite) ===${NC}"
+echo -e "${GREEN}URL: http://localhost:5176/light.html${NC}"
+npm run dev:light > ../logs/frontend-light.log 2>&1 &
+FRONTEND_LIGHT_PID=$!
 cd ..
-
-# Start Light Frontend (simple light version) if files present
-echo -e "\n${CYAN}=== Checking Light Frontend ===${NC}"
-if [ -f "frontend/src/AppLight.tsx" ]; then
-    echo "Light frontend files found — building and serving on port 5176"
-    cd frontend
-    # Build (will include light.html)
-    # Use absolute path for logs so redirections are deterministic
-    REPO_ROOT="$(pwd)/.."
-    LOG_ROOT="$REPO_ROOT/logs"
-    npm run build > "$LOG_ROOT/frontend-light.log" 2>&1 || true
-
-    # Create a single temporary copy of dist and make light.html the index
-    TMP_DIST=$(mktemp -d /tmp/infrawatch-dist-XXXX) || TMP_DIST=""
-    if [ -n "$TMP_DIST" ] && [ -d "dist" ]; then
-        # Copy dist contents (use dot to preserve structure)
-        cp -R dist/. "$TMP_DIST/" || true
-        # Prefer the built light.html from dist (if present) so assets point to generated files
-        if [ -f "$TMP_DIST/light.html" ]; then
-            mv "$TMP_DIST/light.html" "$TMP_DIST/index.html" || true
-        elif [ -f "light.html" ]; then
-            # Fallback: copy source light.html (not preferred, may reference dev src)
-            cp "light.html" "$TMP_DIST/index.html" || true
-        fi
-
-        # Start python http.server from the TMP_DIST so $! refers to the python pid
-        pushd "$TMP_DIST" > /dev/null || true
-        python3 -m http.server 5176 > "$LOG_ROOT/frontend-light.log" 2>&1 &
-        FRONTEND_LIGHT_PID=$!
-        popd > /dev/null || true
-        FRONTEND_LIGHT_TMPDIR="$TMP_DIST"
-        echo "Started light frontend (pid=$FRONTEND_LIGHT_PID) serving from $FRONTEND_LIGHT_TMPDIR" >> "$LOG_ROOT/frontend-light.log" 2>&1 || true
-    else
-        echo "Failed to create temporary dist for light frontend. Skipping light serve." >> "$LOG_ROOT/frontend-light.log" 2>&1 || true
-        FRONTEND_LIGHT_PID=""
-        FRONTEND_LIGHT_TMPDIR=""
-    fi
-    cd ..
-else
-    echo -e "${YELLOW}Light frontend not present in frontend/src — skipping${NC}"
-    FRONTEND_LIGHT_PID=""
-fi
 
 echo ""
 echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"

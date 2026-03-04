@@ -3,17 +3,7 @@
 > vite --config vite.light.config.ts
 
 
-  VITE v5.4.21  ready in 2604 ms
+  VITE v5.4.21  ready in 859 ms
 
   ➜  Local:   http://localhost:5176/
   ➜  Network: http://192.168.31.22:5176/
-  ➜  Network: http://10.10.0.190:5176/
-11:50:14 AM [vite] hmr update /src/components/DockerDashboardLight.tsx, /src/light.css
-11:51:09 AM [vite] hmr update /src/components/DockerDashboardLight.tsx, /src/light.css
-11:51:49 AM [vite] hmr update /src/light.css
-11:53:01 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
-11:54:05 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
-11:55:10 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
-11:56:08 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
-11:57:03 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
-11:57:58 AM [vite] hmr update /src/light.css

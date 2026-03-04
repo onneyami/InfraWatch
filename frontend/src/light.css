@@ -1001,6 +1001,70 @@
   @apply h-full bg-purple-500 rounded-full transition-all;
 }
 
+/* ========== XY Line Charts (Light Version) ========== */
+.chart-container {
+  @apply bg-slate-800/50 border border-slate-700 rounded-xl p-4;
+}
+
+.chart-title {
+  @apply text-sm font-semibold text-slate-300 mb-3;
+}
+
+.xy-chart {
+  @apply relative w-full h-32;
+}
+
+.xy-chart-grid {
+  @apply absolute inset-0;
+  background-image: 
+    linear-gradient(rgba(51, 65, 85, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(51, 65, 85, 0.5) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.xy-chart-line {
+  @apply absolute bottom-0 left-0 right-0 h-full;
+}
+
+.xy-chart-path {
+  fill: none;
+  stroke: #a78bfa;
+  stroke-width: 2;
+}
+
+.xy-chart-area {
+  fill: url(#chartGradient);
+}
+
+.xy-axis-label {
+  @apply text-xs text-slate-500;
+}
+
+.xy-chart-labels {
+  @apply flex justify-between mt-1;
+}
+
+/* Chart with history data */
+.chart-wrapper {
+  @apply w-full;
+}
+
+.chart-stats {
+  @apply grid grid-cols-2 gap-4 mb-4;
+}
+
+.chart-stat {
+  @apply flex flex-col;
+}
+
+.chart-stat-label {
+  @apply text-xs text-slate-400;
+}
+
+.chart-stat-value {
+  @apply text-lg font-bold text-purple-400;
+}
+
 .disk-percent {
   @apply text-xs text-slate-400 w-12 text-right;
 }
