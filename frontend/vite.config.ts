@@ -1,31 +1,32 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-const isLight = process.env.LIGHT === 'true'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 export default defineConfig({
   plugins: [react()],
   server: {
-    // allow overriding port via environment variable for light/demo instances
-    port: Number(process.env.PORT) || 5173,
+    port: 5173,
     host: true,
-    // when launching light version we can automatically open the light entry page
-    open: isLight ? '/light.html' : '/',
+    open: true,
+    fs: {
+      // Allow serving files from one level up to the project root
+      allow: ['..']
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        secure: false,
+        secure: false
       }
     }
   },
   build: {
     rollupOptions: {
-      // For light version, only build light.html; for main version, build index.html
-      input: isLight 
-        ? resolve(__dirname, 'light.html')
-        : resolve(__dirname, 'index.html')
+      input: path.resolve(__dirname, 'light.html')
     }
   }
 })

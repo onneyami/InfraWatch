@@ -3,7 +3,13 @@
 > vite --config vite.light.config.ts
 
 
-  VITE v5.4.21  ready in 859 ms
+  VITE v5.4.21  ready in 2034 ms
 
   ➜  Local:   http://localhost:5176/
-  ➜  Network: http://192.168.31.22:5176/
+  ➜  Network: http://192.168.31.6:5176/
+1:41:04 PM [vite] vite.light.config.ts changed, restarting server...
+Port 5173 is in use, trying another one...
+1:41:04 PM [vite] server restarted.
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: http://192.168.31.6:5174/

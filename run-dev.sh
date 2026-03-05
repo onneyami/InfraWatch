@@ -109,8 +109,6 @@ fi
 echo -e "${YELLOW}Cleaning up existing processes...${NC}"
 check_port 8000
 check_port 5173
-check_port 5176
-check_port 5176
 pkill -f "uvicorn" || true
 pkill -f "vite" || true
 
@@ -120,12 +118,7 @@ mkdir -p logs
 # Function to handle cleanup
 cleanup() {
     echo -e "\n${YELLOW}Shutting down InfraWatch...${NC}"
-    kill $BACKEND_PID $FRONTEND_PID $FRONTEND_LIGHT_PID 2>/dev/null || true
-    # Remove temporary light dist if created
-    if [ -n "$FRONTEND_LIGHT_TMPDIR" ] && [ -d "$FRONTEND_LIGHT_TMPDIR" ]; then
-        echo "Removing temporary light dist: $FRONTEND_LIGHT_TMPDIR"
-        rm -rf "$FRONTEND_LIGHT_TMPDIR" || true
-    fi
+    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
     echo -e "${GREEN}All services stopped. Goodbye! 👋${NC}"
     exit 0
 }
@@ -179,9 +172,9 @@ for i in {1..30}; do
     sleep 1
 done
 
-# Start Frontend (main)
-echo -e "\n${CYAN}=== Starting Frontend (Vite) ===${NC}"
-echo -e "${GREEN}URL: http://localhost:5173${NC}"
+# Start Frontend (Light version - main)
+echo -e "\n${CYAN}=== Starting Frontend (Light) ===${NC}"
+echo -e "${GREEN}URL: http://localhost:5173/light.html${NC}"
 cd frontend
 if [ ! -d "node_modules" ]; then
     echo "Installing npm dependencies..."
@@ -189,12 +182,6 @@ if [ ! -d "node_modules" ]; then
 fi
 npm run dev > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
-
-# Start Frontend Light on port 5176
-echo -e "\n${CYAN}=== Starting Frontend Light (Vite) ===${NC}"
-echo -e "${GREEN}URL: http://localhost:5176/light.html${NC}"
-npm run dev:light > ../logs/frontend-light.log 2>&1 &
-FRONTEND_LIGHT_PID=$!
 cd ..
 
 echo ""
@@ -205,12 +192,7 @@ echo ""
 echo -e "${CYAN}📊 Service Status:${NC}"
 echo -e "  ${GREEN}✓ Backend API:         ${NC}http://localhost:8000"
 echo -e "  ${GREEN}✓ API Documentation:  ${NC}http://localhost:8000/docs"
-echo -e "  ${GREEN}✓ Frontend App:       ${NC}http://localhost:5173"
-if [ -n "$FRONTEND_LIGHT_PID" ]; then
-    echo -e "  ${GREEN}✓ Frontend (Light):    ${NC}http://localhost:5176"
-else
-    echo -e "  ${YELLOW}⚠ Frontend (Light):    ${NC}Not running"
-fi
+echo -e "  ${GREEN}✓ Frontend (Light):   ${NC}http://localhost:5173/light.html"
 echo -e "  ${YELLOW}⚠ Agent:              ${NC}Temporarily disabled (Go compilation issues)"
 echo ""
 echo -e "${CYAN}🔍 Test Endpoints:${NC}"
@@ -220,11 +202,8 @@ echo -e "  ${YELLOW}↪  Docker Simple:  ${NC}http://localhost:8000/api/v1/docke
 echo -e "  ${YELLOW}↪  System Info:    ${NC}http://localhost:8000/api/v1/system/info"
 echo ""
 echo -e "${CYAN}📋 Log Files:${NC}"
-echo -e "  ${BLUE}tail -f logs/backend.log${NC}       - Backend logs"
-echo -e "  ${BLUE}tail -f logs/frontend.log${NC}      - Frontend logs"
-if [ -n "$FRONTEND_LIGHT_PID" ]; then
-    echo -e "  ${BLUE}tail -f logs/frontend-light.log${NC} - Light frontend logs"
-fi
+echo -e "  ${BLUE}tail -f logs/backend.log${NC}   - Backend logs"
+echo -e "  ${BLUE}tail -f logs/frontend.log${NC}  - Frontend logs"
 echo ""
 echo -e "${RED}⚠️  Press Ctrl+C to stop all services${NC}"
 echo -e "${BLUE}══════════════════════════════════════════════════════════${NC}"
@@ -260,8 +239,4 @@ else
 fi
 
 # Wait for all processes
-if [ -n "$FRONTEND_LIGHT_PID" ]; then
-    wait $BACKEND_PID $FRONTEND_PID $FRONTEND_LIGHT_PID 2>/dev/null
-else
-    wait $BACKEND_PID $FRONTEND_PID
-fi
+wait $BACKEND_PID $FRONTEND_PID
