@@ -640,6 +640,13 @@ async def get_system_info():
         except:
             pass
         
+        # Батарея (если доступно)
+        battery = None
+        try:
+            battery = psutil.sensors_battery()
+        except:
+            pass
+        
         return {
             "system": {
                 "hostname": socket.gethostname(),
@@ -677,6 +684,11 @@ async def get_system_info():
                 "top_memory": sorted(processes, key=lambda x: x.get('memory_percent') or 0, reverse=True)[:5],
             },
             "temperatures": temps,
+            "battery": {
+                "percent": battery.percent if battery else None,
+                "seconds_left": battery.secsleft if battery else None,
+                "power_plugged": battery.power_plugged if battery else None,
+            } if battery else None,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
@@ -749,7 +761,7 @@ async def get_docker_metrics():
             volumes=metrics["volumes"],
             events=metrics["events"]
         )
-        
+
     except Exception as e:
         print(f"❌ Docker metrics error: {str(e)}")
         import traceback
@@ -943,7 +955,7 @@ async def test_docker_format():
         networks=[],
         volumes=[],
         events=[]
-    )        
+    )
         
 @app.get("/api/v1/docker/info")
 async def get_docker_info():

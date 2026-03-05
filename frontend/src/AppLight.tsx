@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3 } from 'lucide-react'
+import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery } from 'lucide-react'
 import axios from 'axios'
 import DockerDashboardLight from './components/DockerDashboardLight'
 import { api } from './services/api'
@@ -11,6 +11,19 @@ const API_BASE = 'http://localhost:8000/api/v1'
 interface MetricHistory {
   cpu: number
   memory: number
+  timestamp: number
+}
+
+// Типы для истории Network
+interface NetworkHistory {
+  upload: number
+  download: number
+  timestamp: number
+}
+
+// Типы для истории Battery
+interface BatteryHistory {
+  percent: number
   timestamp: number
 }
 
@@ -624,6 +637,7 @@ interface SystemInfo {
   memory: { percent: number; total: number; used: number }
   disks: { count: number; partitions: any[] }
   network: { bytes_sent: number; bytes_recv: number }
+  battery: { percent: number | null; seconds_left: number | null; power_plugged: boolean | null } | null
   timestamp: string
 }
 
@@ -742,7 +756,7 @@ const MetricChartModal: React.FC<{
       <div className="modal-content metric-modal metric-modal-large" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <div className="metric-modal-title">
-            {type === 'cpu' ? <Cpu className="w-5 h-5" /> : <MemoryStick className="w-5 h-5" />}
+            <Battery className="w-5 h-5" />
             <h3>{title}</h3>
           </div>
           <button onClick={onClose} className="btn-close">
@@ -873,6 +887,441 @@ const MetricChartModal: React.FC<{
   )
 }
 
+// Компонент для отображения графика Battery
+const BatteryChartModal: React.FC<{
+  title: string
+  data: BatteryHistory[]
+  onClose: () => void
+}> = ({ title, data, onClose }) => {
+  const values = data.map(d => d.percent)
+  const maxValue = 100
+  
+  const formatTime = (ts: number) => {
+    const date = new Date(ts * 1000)
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
+
+  const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0
+  const max = values.length > 0 ? Math.max(...values) : 0
+  const min = values.length > 0 ? Math.min(...values) : 0
+
+  // Generate polyline path
+  const generatePolylinePath = (): string => {
+    if (values.length < 2) return ''
+    
+    const width = 100
+    const height = 80
+    const padding = 8
+    const effectiveWidth = width - padding * 2
+    const effectiveHeight = height - padding * 2
+    
+    const points = values.map((v, i) => {
+      const x = padding + (i / (values.length - 1)) * effectiveWidth
+      const y = padding + effectiveHeight - (v / maxValue * effectiveHeight)
+      return { x, y }
+    })
+    
+    let path = `M ${points[0].x},${points[0].y}`
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x},${points[i].y}`
+    }
+    
+    return path
+  }
+
+  // Get color based on value
+  const getColor = (val: number) => {
+    if (val > 50) return '#22c55e'
+    if (val > 20) return '#eab308'
+    return '#ef4444'
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content metric-modal metric-modal-large" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="metric-modal-title">
+            <Activity className="w-5 h-5" />
+            <h3>{title}</h3>
+          </div>
+          <button onClick={onClose} className="btn-close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="modal-body">
+          {/* Stats Summary */}
+          <div className="metric-stats-summary">
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Current</span>
+              <span className="metric-stat-value" style={{ color: getColor(values[values.length - 1] || 0) }}>
+                {(values[values.length - 1] || 0).toFixed(0)}%
+              </span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Average</span>
+              <span className="metric-stat-value" style={{ color: getColor(avg) }}>
+                {avg.toFixed(1)}%
+              </span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Max</span>
+              <span className="metric-stat-value" style={{ color: getColor(max) }}>
+                {max.toFixed(1)}%
+              </span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Min</span>
+              <span className="metric-stat-value" style={{ color: getColor(min) }}>
+                {min.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          {/* XY Line Chart - Polyline */}
+          <div style={{ display: 'flex', marginBottom: '8px' }}>
+            {/* Y-axis labels */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'space-between',
+              paddingRight: '8px',
+              fontSize: '11px',
+              fontFamily: 'monospace'
+            }}>
+              <span style={{color: getColor(100)}}>100%</span>
+              <span style={{color: getColor(75)}}>75%</span>
+              <span style={{color: getColor(50)}}>50%</span>
+              <span style={{color: getColor(25)}}>25%</span>
+              <span style={{color: getColor(0)}}>0%</span>
+            </div>
+            
+            {/* Chart area */}
+            <div style={{ flex: 1, height: '200px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', padding: '8px' }}>
+              <svg viewBox="0 0 100 80" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                <defs>
+                  <linearGradient id="batteryGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                    <stop offset="0%" stopColor="#22c55e" />
+                    <stop offset="50%" stopColor="#eab308" />
+                    <stop offset="100%" stopColor="#ef4444" />
+                  </linearGradient>
+                </defs>
+                
+                {/* Fine grid - horizontal lines */}
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(y => (
+                  <line 
+                    key={`h-${y}`} 
+                    x1="0" y1={y} x2="100" y2={y} 
+                    stroke="rgba(51,65,85,0.3)" 
+                    strokeWidth="0.2" 
+                  />
+                ))}
+                
+                {/* Fine grid - vertical lines */}
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(x => (
+                  <line 
+                    key={`v-${x}`} 
+                    x1={x} y1="0" x2={x} y2="80" 
+                    stroke="rgba(51,65,85,0.2)" 
+                    strokeWidth="0.1"
+                  />
+                ))}
+                
+                {/* Main horizontal grid lines */}
+                {[0, 25, 50, 75, 100].map(y => (
+                  <line 
+                    key={`hm-${y}`} 
+                    x1="0" y1={y} x2="100" y2={y} 
+                    stroke="rgba(51,65,85,0.5)" 
+                    strokeWidth="0.3"
+                  />
+                ))}
+                
+                {/* Main vertical grid lines */}
+                {[0, 25, 50, 75, 100].map(x => (
+                  <line 
+                    key={`vm-${x}`} 
+                    x1={x} y1="0" x2={x} y2="80" 
+                    stroke="rgba(51,65,85,0.3)" 
+                    strokeWidth="0.2"
+                  />
+                ))}
+                
+                {/* Polyline - gradient */}
+                {values.length > 1 && (
+                  <path 
+                    d={generatePolylinePath()} 
+                    fill="none" 
+                    stroke="url(#batteryGradient)" 
+                    strokeWidth="1"
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
+                  />
+                )}
+              </svg>
+            </div>
+          </div>
+          
+          {/* X-axis labels */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            marginLeft: '32px',
+            fontSize: '11px', 
+            color: '#94a3b8',
+            padding: '0 4px'
+          }}>
+            <span>{data[0] ? formatTime(data[0].timestamp) : '--:--'}</span>
+            <span>{data.length > 1 ? formatTime(data[Math.floor(data.length / 2)].timestamp) : '--:--'}</span>
+            <span>{data[data.length - 1] ? formatTime(data[data.length - 1].timestamp) : '--:--'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Компонент для отображения графика Network (две линии - upload/download)
+const NetworkChartModal: React.FC<{
+  title: string
+  data: NetworkHistory[]
+  onClose: () => void
+}> = ({ title, data, onClose }) => {
+  const uploadValues = data.map(d => d.upload)
+  const downloadValues = data.map(d => d.download)
+  
+  const maxValue = Math.max(
+    ...uploadValues, 
+    ...downloadValues, 
+    1
+  )
+  
+  const formatTime = (ts: number) => {
+    const date = new Date(ts * 1000)
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i]
+  }
+
+  const avgUpload = uploadValues.length > 0 ? uploadValues.reduce((a, b) => a + b, 0) / uploadValues.length : 0
+  const avgDownload = downloadValues.length > 0 ? downloadValues.reduce((a, b) => a + b, 0) / downloadValues.length : 0
+  const maxUpload = uploadValues.length > 0 ? Math.max(...uploadValues) : 0
+  const maxDownload = downloadValues.length > 0 ? Math.max(...downloadValues) : 0
+
+  // Generate polyline path for upload
+  const generateUploadPath = (): string => {
+    if (uploadValues.length < 2) return ''
+    
+    const width = 100
+    const height = 80
+    const padding = 8
+    const effectiveWidth = width - padding * 2
+    const effectiveHeight = height - padding * 2
+    
+    const points = uploadValues.map((v, i) => {
+      const x = padding + (i / (uploadValues.length - 1)) * effectiveWidth
+      const y = padding + effectiveHeight - (v / maxValue * effectiveHeight)
+      return { x, y }
+    })
+    
+    let path = `M ${points[0].x},${points[0].y}`
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x},${points[i].y}`
+    }
+    
+    return path
+  }
+
+  // Generate polyline path for download
+  const generateDownloadPath = (): string => {
+    if (downloadValues.length < 2) return ''
+    
+    const width = 100
+    const height = 80
+    const padding = 8
+    const effectiveWidth = width - padding * 2
+    const effectiveHeight = height - padding * 2
+    
+    const points = downloadValues.map((v, i) => {
+      const x = padding + (i / (downloadValues.length - 1)) * effectiveWidth
+      const y = padding + effectiveHeight - (v / maxValue * effectiveHeight)
+      return { x, y }
+    })
+    
+    let path = `M ${points[0].x},${points[0].y}`
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x},${points[i].y}`
+    }
+    
+    return path
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content metric-modal metric-modal-large" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="metric-modal-title">
+            <Activity className="w-5 h-5" />
+            <h3>{title}</h3>
+          </div>
+          <button onClick={onClose} className="btn-close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="modal-body">
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '20px', height: '3px', background: '#a78bfa' }} />
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Upload (↑)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '20px', height: '3px', background: '#ffffff' }} />
+              <span style={{ fontSize: '12px', color: '#94a3b8' }}>Download (↓)</span>
+            </div>
+          </div>
+
+          {/* Stats Summary */}
+          <div className="metric-stats-summary">
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Current Upload</span>
+              <span className="metric-stat-value" style={{ color: '#a78bfa' }}>
+                {(uploadValues[uploadValues.length - 1] || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Avg Upload</span>
+              <span className="metric-stat-value" style={{ color: '#a78bfa' }}>
+                {(avgUpload || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Current Download</span>
+              <span className="metric-stat-value" style={{ color: '#ffffff' }}>
+                {(downloadValues[downloadValues.length - 1] || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div className="metric-stat-box">
+              <span className="metric-stat-label">Avg Download</span>
+              <span className="metric-stat-value" style={{ color: '#ffffff' }}>
+                {(avgDownload || 0).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          {/* XY Line Chart - Two Polylines */}
+          <div style={{ display: 'flex', marginBottom: '8px' }}>
+            {/* Y-axis labels */}
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'space-between',
+              paddingRight: '8px',
+              fontSize: '11px',
+              fontFamily: 'monospace',
+              color: '#94a3b8'
+            }}>
+              <span>{formatBytes(maxValue)}</span>
+              <span>{formatBytes(maxValue * 0.75)}</span>
+              <span>{formatBytes(maxValue * 0.5)}</span>
+              <span>{formatBytes(maxValue * 0.25)}</span>
+              <span>0</span>
+            </div>
+            
+            {/* Chart area */}
+            <div style={{ flex: 1, height: '200px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '8px', padding: '8px' }}>
+              <svg viewBox="0 0 100 80" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                {/* Fine grid - horizontal lines every 10 units */}
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(y => (
+                  <line 
+                    key={`h-${y}`} 
+                    x1="0" y1={y} x2="100" y2={y} 
+                    stroke="rgba(51,65,85,0.3)" 
+                    strokeWidth="0.2" 
+                  />
+                ))}
+                
+                {/* Fine grid - vertical lines every 10 units */}
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map(x => (
+                  <line 
+                    key={`v-${x}`} 
+                    x1={x} y1="0" x2={x} y2="80" 
+                    stroke="rgba(51,65,85,0.2)" 
+                    strokeWidth="0.1"
+                  />
+                ))}
+                
+                {/* Main horizontal grid lines */}
+                {[0, 25, 50, 75, 100].map(y => (
+                  <line 
+                    key={`hm-${y}`} 
+                    x1="0" y1={y} x2="100" y2={y} 
+                    stroke="rgba(51,65,85,0.5)" 
+                    strokeWidth="0.3"
+                  />
+                ))}
+                
+                {/* Main vertical grid lines */}
+                {[0, 25, 50, 75, 100].map(x => (
+                  <line 
+                    key={`vm-${x}`} 
+                    x1={x} y1="0" x2={x} y2="80" 
+                    stroke="rgba(51,65,85,0.3)" 
+                    strokeWidth="0.2"
+                  />
+                ))}
+                
+                {/* Upload polyline - purple */}
+                {uploadValues.length > 1 && (
+                  <path 
+                    d={generateUploadPath()} 
+                    fill="none" 
+                    stroke="#a78bfa" 
+                    strokeWidth="1"
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
+                  />
+                )}
+                
+                {/* Download polyline - white */}
+                {downloadValues.length > 1 && (
+                  <path 
+                    d={generateDownloadPath()} 
+                    fill="none" 
+                    stroke="#ffffff" 
+                    strokeWidth="1"
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
+                  />
+                )}
+              </svg>
+            </div>
+          </div>
+          
+          {/* X-axis labels (time) */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            marginLeft: '32px',
+            fontSize: '11px', 
+            color: '#94a3b8',
+            padding: '0 4px'
+          }}>
+            <span>{data[0] ? formatTime(data[0].timestamp) : '--:--'}</span>
+            <span>{data.length > 1 ? formatTime(data[Math.floor(data.length / 2)].timestamp) : '--:--'}</span>
+            <span>{data[data.length - 1] ? formatTime(data[data.length - 1].timestamp) : '--:--'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const AppLight: React.FC = () => {
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null)
   const [dockerStats, setDockerStats] = useState<any>(null)
@@ -884,8 +1333,15 @@ const AppLight: React.FC = () => {
 
   // History for CPU and Memory charts
   const [metricHistory, setMetricHistory] = useState<MetricHistory[]>([])
+  const [networkHistory, setNetworkHistory] = useState<NetworkHistory[]>([])
+  const [batteryHistory, setBatteryHistory] = useState<BatteryHistory[]>([])
   const [showCpuChart, setShowCpuChart] = useState(false)
   const [showMemoryChart, setShowMemoryChart] = useState(false)
+  const [showNetworkChart, setShowNetworkChart] = useState(false)
+  const [showBatteryChart, setShowBatteryChart] = useState(false)
+
+  // Для расчета скорости network
+  const prevNetworkRef = useRef<{ bytes_sent: number; bytes_recv: number } | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -923,6 +1379,50 @@ const AppLight: React.FC = () => {
             }
             const updated = [...prev, newEntry]
             // Keep last 30 entries (about 2.5 minutes of data)
+            return updated.slice(-30)
+          })
+        }
+        
+        // Add network to history (normalized values for chart)
+        if (sysData?.network?.bytes_sent !== undefined && sysData?.network?.bytes_recv !== undefined) {
+          const currentSent = sysData.network.bytes_sent
+          const currentRecv = sysData.network.bytes_recv
+          
+          // Calculate delta if we have previous values
+          let upload = 0
+          let download = 0
+          
+          if (prevNetworkRef.current) {
+            const deltaSent = Math.max(0, currentSent - prevNetworkRef.current.bytes_sent)
+            const deltaRecv = Math.max(0, currentRecv - prevNetworkRef.current.bytes_recv)
+            // Normalize to 0-100 scale based on typical values (1GB = 100%)
+            upload = Math.min(100, (deltaSent / (1024 * 1024 * 100)) * 100)
+            download = Math.min(100, (deltaRecv / (1024 * 1024 * 100)) * 100)
+          }
+          
+          prevNetworkRef.current = { bytes_sent: currentSent, bytes_recv: currentRecv }
+          
+          setNetworkHistory(prev => {
+            const newEntry: NetworkHistory = {
+              upload,
+              download,
+              timestamp: Date.now() / 1000
+            }
+            const updated = [...prev, newEntry]
+            // Keep last 30 entries
+            return updated.slice(-30)
+          })
+        }
+        
+        // Add battery to history
+        if (sysData?.battery?.percent !== undefined && sysData.battery.percent !== null) {
+          setBatteryHistory(prev => {
+            const newEntry: BatteryHistory = {
+              percent: sysData.battery.percent,
+              timestamp: Date.now() / 1000
+            }
+            const updated = [...prev, newEntry]
+            // Keep last 30 entries
             return updated.slice(-30)
           })
         }
@@ -1007,25 +1507,20 @@ const AppLight: React.FC = () => {
                       icon={<MemoryStick className="w-4 h-4" />}
                     />
 
-                    <div className="metric-card">
+                    <div className="metric-card metric-card-clickable" onClick={() => setShowBatteryChart(true)}>
                       <div className="metric-header">
                         <span className="metric-title">Uptime</span>
                       </div>
                       <div className="metric-value-large">{formatUptime(sysInfo.system?.uptime || 0)}</div>
-                    </div>
-
-                    <div className="metric-card">
-                      <div className="metric-header">
-                        <span className="metric-title">Disks</span>
-                      </div>
-                      <div className="metric-value-large">{sysInfo.disks?.count || 0}</div>
-                    </div>
-
-                    <div className="metric-card">
-                      <div className="metric-header">
-                        <span className="metric-title">CPU Cores</span>
-                      </div>
-                      <div className="metric-value-large">{sysInfo.cpu?.count || 0}</div>
+                      {sysInfo.battery?.percent !== null && sysInfo.battery?.percent !== undefined && (
+                        <>
+                          <div className="metric-subvalue" style={{ color: sysInfo.battery.percent > 50 ? '#22c55e' : sysInfo.battery.percent > 20 ? '#eab308' : '#ef4444' }}>
+                            <Battery className="w-4 h-4" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                            {sysInfo.battery.percent}%
+                          </div>
+                          <div className="metric-click-hint">Click for battery history</div>
+                        </>
+                      )}
                     </div>
 
                     <div className="metric-card">
@@ -1036,12 +1531,13 @@ const AppLight: React.FC = () => {
                       <div className="metric-detail">Used of {formatBytes(sysInfo.disks?.partitions?.[0]?.total || 0)}</div>
                     </div>
 
-                    <div className="metric-card">
+                    <div className="metric-card metric-card-clickable" onClick={() => setShowNetworkChart(true)}>
                       <div className="metric-header">
-                        <span className="metric-title">Network</span>
+                        <span className="metric-title"><Activity className="w-4 h-4" /> Network</span>
                       </div>
                       <div className="metric-subvalue">↓ {formatBytes(sysInfo.network?.bytes_recv || 0)}</div>
                       <div className="metric-detail">↑ {formatBytes(sysInfo.network?.bytes_sent || 0)}</div>
+                      <div className="metric-click-hint">Click for details</div>
                     </div>
                   </>
                 )}
@@ -1115,6 +1611,24 @@ const AppLight: React.FC = () => {
           data={metricHistory}
           type="memory"
           onClose={() => setShowMemoryChart(false)}
+        />
+      )}
+
+      {/* Network Chart Modal */}
+      {showNetworkChart && (
+        <NetworkChartModal
+          title="Network Traffic"
+          data={networkHistory}
+          onClose={() => setShowNetworkChart(false)}
+        />
+      )}
+
+      {/* Battery Chart Modal */}
+      {showBatteryChart && (
+        <BatteryChartModal
+          title="Battery Level"
+          data={batteryHistory}
+          onClose={() => setShowBatteryChart(false)}
         />
       )}
     </div>

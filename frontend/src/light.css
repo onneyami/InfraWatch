@@ -1362,9 +1362,15 @@
   @apply grid grid-cols-4 gap-3 mb-6;
 }
 
-.metric-stat-box {
-  @apply flex flex-col items-center p-3 bg-slate-700/30 rounded-lg;
-}
+  .metric-stat-box {
+    @apply flex flex-col items-center p-3 bg-slate-700/30 rounded-lg min-w-0;
+  }
+  .metric-stat-label {
+    @apply text-xs text-slate-500 mb-1 truncate;
+  }
+  .metric-stat-value {
+    @apply text-lg font-bold text-purple-400 whitespace-nowrap;
+  }
 
 .metric-stat-label {
   @apply text-xs text-slate-500 mb-1;
