@@ -4,16 +4,53 @@
 
 /* InfraWatch Light - Full-featured UI */
 
-:root {
+/* ===== DARK THEME (default) ===== */
+:root,
+[data-theme="dark"] {
   --primary-purple: #a78bfa;
-  --dark-bg: #0f172a;
-  --card-bg: #1e293b;
-  --card-border: #334155;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: rgba(30, 41, 59, 0.5);
+  --bg-card-hover: rgba(30, 41, 59, 1);
+  --border-color: #334155;
+  --border-hover: #a78bfa;
   --text-primary: #f1f5f9;
   --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-label: #64748b;
   --success-green: #10b981;
   --warning-yellow: #f59e0b;
   --error-red: #ef4444;
+  --gradient-start: rgba(139, 92, 246, 0.3);
+  --gradient-end: rgba(79, 172, 254, 0.3);
+  --chart-bg: rgba(15, 23, 42, 0.6);
+  --grid-color: rgba(51, 65, 85, 0.5);
+  --overlay-bg: rgba(0, 0, 0, 0.7);
+}
+
+/* ===== LIGHT THEME ===== */
+[data-theme="light"] {
+  --primary-purple: #7c3aed;
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-tertiary: #e2e8f0;
+  --bg-card: rgba(255, 255, 255, 0.8);
+  --bg-card-hover: rgba(255, 255, 255, 1);
+  --border-color: #e2e8f0;
+  --border-hover: #7c3aed;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-label: #94a3b8;
+  --success-green: #059669;
+  --warning-yellow: #d97706;
+  --error-red: #dc2626;
+  --gradient-start: rgba(124, 58, 237, 0.1);
+  --gradient-end: rgba(59, 130, 246, 0.1);
+  --chart-bg: rgba(241, 245, 249, 0.8);
+  --grid-color: rgba(148, 163, 184, 0.3);
+  --overlay-bg: rgba(0, 0, 0, 0.5);
 }
 
 @layer base {
@@ -21,14 +58,15 @@
     width: 100%;
     height: 100%;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-    background-color: var(--dark-bg);
+    background-color: var(--bg-primary);
     color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   body {
     background-image: 
-      radial-gradient(ellipse at 20% 50%, rgba(139, 92, 246, 0.3) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 80%, rgba(79, 172, 254, 0.3) 0%, transparent 50%);
+      radial-gradient(ellipse at 20% 50%, var(--gradient-start) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, var(--gradient-end) 0%, transparent 50%);
     background-attachment: fixed;
   }
 }
@@ -36,19 +74,47 @@
 @layer components {
   /* Main App Container */
   .app-container {
-    @apply min-h-screen flex flex-col bg-slate-950;
+    @apply min-h-screen flex flex-col;
+    background-color: var(--bg-primary);
+    transition: background-color 0.3s ease;
   }
 
   .app-header {
-    @apply px-8 py-8 border-b border-slate-700 bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-lg mb-8;
+    @apply px-8 py-6 border-b backdrop-blur-lg mb-8;
+    border-color: var(--border-color);
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    transition: border-color 0.3s ease;
+  }
+
+  .app-header-content {
+    @apply flex items-center justify-between;
   }
 
   .app-title {
-    @apply text-4xl font-black bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-2;
+    @apply text-4xl font-black bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent mb-1;
   }
 
   .app-subtitle {
-    @apply text-base text-slate-400 font-light;
+    @apply text-base font-light;
+    color: var(--text-muted);
+  }
+
+  /* Theme Toggle Button */
+  .theme-toggle {
+    @apply p-3 rounded-xl transition-all duration-300 cursor-pointer border-none;
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+  }
+
+  .theme-toggle:hover {
+    background-color: var(--bg-card-hover);
+    border-color: var(--border-hover);
+    transform: scale(1.05);
+  }
+
+  .theme-toggle:active {
+    transform: scale(0.95);
   }
 
   .app-main {
@@ -56,16 +122,22 @@
   }
 
   .app-footer {
-    @apply px-8 py-6 border-t border-slate-700 bg-gradient-to-r from-purple-500/5 to-blue-500/5 text-center text-slate-400 text-sm mt-8;
+    @apply px-8 py-6 text-center text-sm mt-8;
+    border-top: 1px solid var(--border-color);
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: var(--text-muted);
   }
 
   /* Loading State */
   .loading-state {
     @apply flex flex-col items-center justify-center min-h-96 gap-4;
+    color: var(--text-muted);
   }
 
   .spinner {
-    @apply w-10 h-10 border-4 border-purple-500/20 border-t-purple-400 rounded-full animate-spin;
+    @apply w-10 h-10 border-4 rounded-full animate-spin;
+    border-color: rgba(139, 92, 246, 0.2);
+    border-top-color: var(--primary-purple);
   }
 
   /* Sections */
@@ -75,11 +147,12 @@
   }
 
   .section-header {
-    @apply mb-6;
+    @apply mb-6 flex items-center justify-between;
   }
 
   .section-title {
-    @apply text-2xl font-semibold text-slate-100;
+    @apply text-2xl font-semibold;
+    color: var(--text-primary);
   }
 
   /* Metrics Grid */
@@ -89,7 +162,29 @@
 
   /* Metric Card */
   .metric-card {
-    @apply p-6 bg-slate-800/50 border border-slate-700 rounded-xl backdrop-blur-sm transition-all duration-300 hover:border-purple-400 hover:bg-slate-800 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-purple-500/10;
+    @apply p-6 rounded-xl backdrop-blur-sm transition-all duration-300;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+  }
+
+  .metric-card:hover {
+    background-color: var(--bg-card-hover);
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 40px rgba(139, 92, 246, 0.1);
+  }
+
+  .metric-card-clickable {
+    @apply cursor-pointer;
+  }
+
+  .metric-click-hint {
+    @apply text-xs mt-2 opacity-0 transition-opacity duration-300;
+    color: var(--text-muted);
+  }
+
+  .metric-card-clickable:hover .metric-click-hint {
+    @apply opacity-100;
   }
 
   .metric-header {
@@ -97,32 +192,39 @@
   }
 
   .metric-title {
-    @apply text-sm text-slate-400 font-medium;
+    @apply text-sm font-medium flex items-center gap-2;
+    color: var(--text-muted);
   }
 
   .metric-value {
-    @apply text-lg text-purple-400 font-semibold;
+    @apply text-lg font-semibold;
+    color: var(--primary-purple);
   }
 
   .metric-value-large {
-    @apply text-3xl font-bold text-purple-400 mt-1;
+    @apply text-3xl font-bold mt-1;
+    color: var(--primary-purple);
   }
 
   .metric-subvalue {
-    @apply text-xl font-semibold text-slate-100 mt-1;
+    @apply text-xl font-semibold mt-1;
+    color: var(--text-primary);
   }
 
   .metric-detail {
-    @apply text-xs text-slate-400 mt-1;
+    @apply text-xs mt-1;
+    color: var(--text-muted);
   }
 
   /* Progress Bar */
   .metric-bar-container {
-    @apply w-full h-2 bg-purple-500/10 rounded-full overflow-hidden mt-3;
+    @apply w-full h-2 rounded-full overflow-hidden mt-3;
+    background-color: rgba(139, 92, 246, 0.1);
   }
 
   .metric-bar {
-    @apply h-full rounded-full transition-all duration-300 bg-gradient-to-r from-purple-400 to-blue-400;
+    @apply h-full rounded-full transition-all duration-300;
+    background: linear-gradient(90deg, var(--primary-purple), #3b82f6);
   }
 
   /* Docker Section */
@@ -235,15 +337,25 @@
   }
 
   .btn-primary {
-    @apply bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:scale-105 hover:shadow-lg hover:shadow-purple-500/40;
+    @apply text-white hover:scale-105 hover:shadow-lg;
+    background: linear-gradient(135deg, var(--primary-purple), #3b82f6);
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
   }
 
   .btn-danger {
-    @apply bg-red-500/20 text-red-400 border border-red-500 hover:bg-red-500/30;
+    @apply text-red-400 border hover:bg-red-500/30;
+    background-color: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
   }
 
   .btn-sm {
-    @apply px-3 py-1 text-xs;
+    @apply px-3 py-1.5 text-xs;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+  }
+
+  .btn-sm:hover {
+    background-color: var(--bg-card-hover);
   }
 
   /* Search and Filter */
@@ -272,6 +384,14 @@
     @apply px-4 py-4;
   }
 
+  .app-header-content {
+    @apply flex-col items-start gap-4;
+  }
+
+  .theme-toggle {
+    @apply self-end;
+  }
+
   .app-title {
     @apply text-2xl;
   }
@@ -282,6 +402,10 @@
 
   .metrics-grid {
     @apply grid-cols-1;
+  }
+
+  .metric-stats-summary {
+    @apply grid-cols-2;
   }
 
   .docker-stats {
@@ -759,16 +883,20 @@
 
 /* Light Version - Vulnerability Scanner */
 .vuln-scanner-light {
-  @apply bg-slate-800/50 border border-slate-700 rounded-xl p-5;
+  @apply rounded-xl p-5;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
 }
 
 .vuln-header {
-  @apply flex items-center gap-3 mb-5 pb-4 border-b border-slate-700;
+  @apply flex items-center gap-3 mb-5 pb-4;
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
 }
 
 .vuln-header svg {
-  @apply w-5 h-5 text-purple-400;
+  @apply w-5 h-5;
+  color: var(--primary-purple);
 }
 
 .vuln-header span {
@@ -776,7 +904,13 @@
 }
 
 .btn-refresh {
-  @apply p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors;
+  @apply p-2 rounded-lg transition-colors;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.btn-refresh:hover {
+  background-color: var(--bg-card-hover);
 }
 
 .vuln-images {
@@ -784,7 +918,9 @@
 }
 
 .vuln-image-card {
-  @apply flex items-center justify-between p-3 bg-slate-700/30 rounded-lg border border-slate-600;
+  @apply flex items-center justify-between p-3 rounded-lg;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
 }
 
 .vuln-image-info {
@@ -792,19 +928,29 @@
 }
 
 .vuln-image-name {
-  @apply font-medium text-slate-200 text-sm;
+  @apply font-medium text-sm;
+  color: var(--text-primary);
 }
 
 .vuln-image-size {
-  @apply text-xs text-slate-400;
+  @apply text-xs;
+  color: var(--text-muted);
 }
 
 .btn-scan {
-  @apply px-4 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50;
+  @apply px-4 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50;
+  background-color: rgba(139, 92, 246, 0.2);
+  color: var(--primary-purple);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.btn-scan:hover {
+  background-color: rgba(139, 92, 246, 0.3);
 }
 
 .vuln-result {
-  @apply mt-5 pt-4 border-t border-slate-700;
+  @apply mt-5 pt-4;
+  border-top: 1px solid var(--border-color);
 }
 
 .vuln-summary {
@@ -816,15 +962,15 @@
 }
 
 .text-error {
-  @apply text-red-400;
+  color: var(--error-red);
 }
 
 .text-success {
-  @apply text-green-400;
+  color: var(--success-green);
 }
 
 .text-muted {
-  @apply text-slate-400;
+  color: var(--text-muted);
 }
 
 /* Light Version - Agent Metrics */
@@ -833,23 +979,33 @@
 }
 
 .agent-card {
-  @apply bg-slate-800/50 border border-slate-700 rounded-xl p-5 transition-all duration-300 hover:border-purple-400;
+  @apply rounded-xl p-5 transition-all duration-300;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.agent-card:hover {
+  border-color: var(--border-hover);
 }
 
 .agent-header {
-  @apply flex items-center gap-2 mb-4 pb-3 border-b border-slate-700;
+  @apply flex items-center gap-2 mb-4 pb-3;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .agent-header svg {
-  @apply w-4 h-4 text-purple-400;
+  @apply w-4 h-4;
+  color: var(--primary-purple);
 }
 
 .agent-hostname {
-  @apply font-semibold text-slate-100;
+  @apply font-semibold;
+  color: var(--text-primary);
 }
 
 .agent-id {
-  @apply text-xs text-slate-400;
+  @apply text-xs;
+  color: var(--text-muted);
 }
 
 .agent-stats {
@@ -861,16 +1017,19 @@
 }
 
 .stat-label {
-  @apply text-xs text-slate-400 mb-1;
+  @apply text-xs mb-1;
+  color: var(--text-muted);
 }
 
 .stat-value {
-  @apply text-lg font-bold text-purple-400;
+  @apply text-lg font-bold;
+  color: var(--primary-purple);
 }
 
 /* Skeleton loader */
 .skeleton {
-  @apply bg-slate-700/50 rounded animate-pulse;
+  @apply rounded animate-pulse;
+  background-color: var(--bg-tertiary);
 }
 
 /* Button styles for light version */
@@ -891,11 +1050,13 @@
 }
 
 .empty-state {
-  @apply flex flex-col items-center justify-center py-8 text-slate-400;
+  @apply flex flex-col items-center justify-center py-8;
+  color: var(--text-muted);
 }
 
 .empty-state svg {
-  @apply w-6 h-6 mb-2 opacity-50;
+  @apply w-6 h-6 mb-2;
+  opacity: 0.5;
 }
 
 .empty-state p {
@@ -1154,23 +1315,35 @@
 
 /* ========== MODAL STYLES ========== */
 .modal-overlay {
-  @apply fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4;
+  @apply fixed inset-0 flex items-center justify-center z-50 p-4;
+  background-color: var(--overlay-bg);
 }
 
 .modal-content {
-  @apply bg-slate-800 border border-slate-700 rounded-xl max-w-md w-full max-h-[80vh] overflow-hidden;
+  @apply rounded-xl max-w-md w-full max-h-[80vh] overflow-hidden;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .modal-header {
-  @apply flex items-center justify-between p-4 border-b border-slate-700;
+  @apply flex items-center justify-between p-4;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
-  @apply text-lg font-semibold text-slate-100;
+  @apply text-lg font-semibold;
+  color: var(--text-primary);
 }
 
 .btn-close {
-  @apply p-1.5 rounded-lg bg-slate-700 text-slate-400 hover:text-white hover:bg-slate-600 transition-colors;
+  @apply p-1.5 rounded-lg transition-colors;
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.btn-close:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -1178,11 +1351,17 @@
 }
 
 .modal-actions {
-  @apply mt-4 pt-4 border-t border-slate-700;
+  @apply mt-4 pt-4;
+  border-top: 1px solid var(--border-color);
 }
 
 .btn-stop-process-large {
-  @apply w-full py-2.5 rounded-lg bg-red-500 text-white font-medium flex items-center justify-center gap-2 hover:bg-red-600 transition-colors disabled:opacity-50;
+  @apply w-full py-2.5 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors disabled:opacity-50;
+  background-color: var(--error-red);
+}
+
+.btn-stop-process-large:hover {
+  opacity: 0.9;
 }
 
 /* ========== VULNERABILITY SCANNER - EXTENDED STYLES ========== */
@@ -1351,33 +1530,33 @@
 }
 
 .metric-modal-title svg {
-  @apply w-5 h-5 text-purple-400;
+  @apply w-5 h-5;
+  color: var(--primary-purple);
 }
 
 .metric-modal-title h3 {
-  @apply text-lg font-semibold text-slate-100;
+  @apply text-lg font-semibold;
+  color: var(--text-primary);
 }
 
 .metric-stats-summary {
   @apply grid grid-cols-4 gap-3 mb-6;
 }
 
-  .metric-stat-box {
-    @apply flex flex-col items-center p-3 bg-slate-700/30 rounded-lg min-w-0;
-  }
-  .metric-stat-label {
-    @apply text-xs text-slate-500 mb-1 truncate;
-  }
-  .metric-stat-value {
-    @apply text-lg font-bold text-purple-400 whitespace-nowrap;
-  }
+.metric-stat-box {
+  @apply flex flex-col items-center p-3 rounded-lg min-w-0;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
 
 .metric-stat-label {
-  @apply text-xs text-slate-500 mb-1;
+  @apply text-xs mb-1 truncate;
+  color: var(--text-label);
 }
 
 .metric-stat-value {
-  @apply text-lg font-bold text-purple-400;
+  @apply text-lg font-bold whitespace-nowrap;
+  color: var(--primary-purple);
 }
 
 .metric-chart-container {
@@ -1398,4 +1577,414 @@
 
 .metric-chart-labels {
   @apply flex justify-between mt-2 text-xs text-slate-500;
+}
+
+/* ========== LIGHT THEME OVERRIDES ========== */
+[data-theme="light"] .docker-engine-card,
+[data-theme="light"] .docker-unavailable,
+[data-theme="light"] .stat-box,
+[data-theme="light"] .container-card,
+[data-theme="light"] .image-card,
+[data-theme="light"] .network-card,
+[data-theme="light"] .volume-card,
+[data-theme="light"] .disk-usage-card,
+[data-theme="light"] .images-breakdown,
+[data-theme="light"] .connection-card,
+[data-theme="light"] .network-stats-card,
+[data-theme="light"] .chart-container {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .docker-tabs {
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .docker-tab {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .docker-tab:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .docker-tab.active {
+  background-color: rgba(139, 92, 246, 0.15);
+  border-color: var(--primary-purple);
+  color: var(--primary-purple);
+}
+
+[data-theme="light"] .search-bar {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .search-input {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .search-input::placeholder {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .search-icon,
+[data-theme="light"] .refresh-btn {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .refresh-btn:hover {
+  color: var(--primary-purple);
+}
+
+[data-theme="light"] .engine-info h3,
+[data-theme="light"] .stat-number,
+[data-theme="light"] .container-name,
+[data-theme="light"] .image-name,
+[data-theme="light"] .network-header h4,
+[data-theme="light"] .volume-header h4,
+[data-theme="light"] .disk-usage-card h4,
+[data-theme="light"] .images-breakdown h4,
+[data-theme="light"] .connection-header h4,
+[data-theme="light"] .network-stats-card h4,
+[data-theme="light"] .network-name,
+[data-theme="light"] .item-name {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .engine-info p,
+[data-theme="light"] .running-label,
+[data-theme="light"] .stat-label,
+[data-theme="light"] .stat-detail,
+[data-theme="light"] .image-info,
+[data-theme="light"] .network-driver,
+[data-theme="light"] .metric-label,
+[data-theme="light"] .detail-label,
+[data-theme="light"] .tab-count {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .empty-state {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .container-details,
+[data-theme="light"] .agent-details,
+[data-theme="light"] .breakdown-item,
+[data-theme="light"] .network-stat-item {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .detail-value,
+[data-theme="light"] .metric-value,
+[data-theme="light"] .item-size,
+[data-theme="light"] .network-icon {
+  color: var(--primary-purple);
+}
+
+[data-theme="light"] .action-buttons,
+[data-theme="light"] .network-actions,
+[data-theme="light"] .volume-actions {
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .btn-action {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+[data-theme="light"] .btn-action:hover {
+  background-color: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+}
+
+[data-theme="light"] .btn-danger {
+  background-color: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+[data-theme="light"] .btn-danger:hover {
+  background-color: rgba(220, 38, 38, 0.25);
+  border-color: #dc2626;
+}
+
+[data-theme="light"] .agent-card {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .agent-header-clickable:hover {
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="light"] .agent-header {
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .agent-hostname {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .agent-id,
+[data-theme="light"] .agent-uptime {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .quick-stat {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .detail-section h4 {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .detail-item .detail-label {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .detail-item .detail-value {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .disk-mount {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .disk-bar-wrap {
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="light"] .process-item {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .process-item:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+[data-theme="light"] .process-name {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .process-pid,
+[data-theme="light"] .process-cpu,
+[data-theme="light"] .process-mem {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .process-cpu.high {
+  color: var(--error-red);
+}
+
+[data-theme="light"] .sort-select {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .btn-sort {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .btn-sort:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--primary-purple);
+  color: var(--primary-purple);
+}
+
+[data-theme="light"] .btn-view-all {
+  background-color: var(--bg-tertiary);
+  color: var(--primary-purple);
+}
+
+[data-theme="light"] .btn-view-all:hover {
+  background-color: var(--bg-card-hover);
+}
+
+[data-theme="light"] .docker-stat-mini {
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .history-bar {
+  background: linear-gradient(to top, var(--primary-purple), #a78bfa);
+}
+
+[data-theme="light"] .xy-chart-grid {
+  background-image: 
+    linear-gradient(rgba(148, 163, 184, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.3) 1px, transparent 1px);
+}
+
+/* Light theme - Vulnerability scanner */
+[data-theme="light"] .vuln-item {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .vuln-item-header:hover {
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="light"] .vuln-id {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .vuln-arrow {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .vuln-item-details {
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .vuln-title {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .vuln-desc-section p,
+[data-theme="light"] .vuln-fix-section p {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .vuln-severity-desc {
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .vuln-detail-section h4 {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .vuln-detail-section p {
+  color: var(--text-secondary);
+}
+
+/* Light theme - Modal */
+[data-theme="light"] .modal-content {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .modal-header {
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .modal-header h3 {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .btn-close {
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .btn-close:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .modal-body {
+  background-color: var(--bg-secondary);
+}
+
+[data-theme="light"] .modal-actions {
+  border-color: var(--border-color);
+}
+
+/* Light theme - Buttons */
+[data-theme="light"] .btn-sm {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .btn-sm:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .btn-delete-red {
+  background-color: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+[data-theme="light"] .btn-delete-red:hover {
+  background-color: rgba(220, 38, 38, 0.25);
+  border-color: #dc2626;
+}
+
+/* Light theme - Clickable metric cards */
+[data-theme="light"] .metric-card-clickable:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--primary-purple);
+}
+
+/* Light theme - Metric stats */
+[data-theme="light"] .metric-stat-box {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .metric-stat-label {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .metric-stat-value {
+  color: var(--primary-purple);
+}
+
+/* Light theme - Section title */
+[data-theme="light"] .section-title {
+  color: var(--text-primary);
+}
+
+/* Light theme - Metric chart */
+[data-theme="light"] .metric-chart {
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="light"] .metric-chart-bar {
+  background: linear-gradient(to top, var(--primary-purple), #a78bfa);
+}
+
+[data-theme="light"] .metric-chart-empty {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .metric-chart-labels {
+  color: var(--text-muted);
+}
+
+/* Light theme - Usage metric */
+[data-theme="light"] .usage-metric {
+  border-color: var(--border-color);
+}
+
+/* Light theme - Skeleton */
+[data-theme="light"] .skeleton {
+  background-color: var(--bg-tertiary);
+}
+
+/* Light theme - Network chart values */
+.metric-value-upload {
+  color: #a78bfa;
+}
+
+.metric-value-download {
+  color: #ffffff;
+}
+
+[data-theme="light"] .metric-value-download {
+  color: #3b82f6;
 }

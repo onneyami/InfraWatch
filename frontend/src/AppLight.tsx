@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery } from 'lucide-react'
+import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery, Sun, Moon } from 'lucide-react'
 import axios from 'axios'
 import DockerDashboardLight from './components/DockerDashboardLight'
 import { api } from './services/api'
@@ -1181,7 +1181,7 @@ const NetworkChartModal: React.FC<{
               <span style={{ fontSize: '12px', color: '#94a3b8' }}>Upload (↑)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '20px', height: '3px', background: '#ffffff' }} />
+              <div style={{ width: '20px', height: '3px', background: '#3b82f6' }} />
               <span style={{ fontSize: '12px', color: '#94a3b8' }}>Download (↓)</span>
             </div>
           </div>
@@ -1190,25 +1190,25 @@ const NetworkChartModal: React.FC<{
           <div className="metric-stats-summary">
             <div className="metric-stat-box">
               <span className="metric-stat-label">Current Upload</span>
-              <span className="metric-stat-value" style={{ color: '#a78bfa' }}>
+              <span className="metric-stat-value metric-value-upload">
                 {(uploadValues[uploadValues.length - 1] || 0).toFixed(1)}%
               </span>
             </div>
             <div className="metric-stat-box">
               <span className="metric-stat-label">Avg Upload</span>
-              <span className="metric-stat-value" style={{ color: '#a78bfa' }}>
+              <span className="metric-stat-value metric-value-upload">
                 {(avgUpload || 0).toFixed(1)}%
               </span>
             </div>
             <div className="metric-stat-box">
               <span className="metric-stat-label">Current Download</span>
-              <span className="metric-stat-value" style={{ color: '#ffffff' }}>
+              <span className="metric-stat-value metric-value-download">
                 {(downloadValues[downloadValues.length - 1] || 0).toFixed(1)}%
               </span>
             </div>
             <div className="metric-stat-box">
               <span className="metric-stat-label">Avg Download</span>
-              <span className="metric-stat-value" style={{ color: '#ffffff' }}>
+              <span className="metric-stat-value metric-value-download">
                 {(avgDownload || 0).toFixed(1)}%
               </span>
             </div>
@@ -1288,12 +1288,12 @@ const NetworkChartModal: React.FC<{
                   />
                 )}
                 
-                {/* Download polyline - white */}
+                {/* Download polyline - blue */}
                 {downloadValues.length > 1 && (
                   <path 
                     d={generateDownloadPath()} 
                     fill="none" 
-                    stroke="#ffffff" 
+                    stroke="#3b82f6"
                     strokeWidth="1"
                     strokeLinecap="square"
                     strokeLinejoin="miter"
@@ -1323,6 +1323,16 @@ const NetworkChartModal: React.FC<{
 }
 
 const AppLight: React.FC = () => {
+  // Theme state
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('infrawatch-theme')
+      if (saved === 'light' || saved === 'dark') return saved
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+    }
+    return 'dark'
+  })
+
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null)
   const [dockerStats, setDockerStats] = useState<any>(null)
   const [agentMetrics, setAgentMetrics] = useState<Record<string, any>>({})
@@ -1342,6 +1352,16 @@ const AppLight: React.FC = () => {
 
   // Для расчета скорости network
   const prevNetworkRef = useRef<{ bytes_sent: number; bytes_recv: number } | null>(null)
+
+  // Apply theme
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('infrawatch-theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+  }
 
   useEffect(() => {
     let mounted = true
@@ -1461,8 +1481,19 @@ const AppLight: React.FC = () => {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1 className="app-title">InfraWatch</h1>
-        <p className="app-subtitle">Infrastructure Monitoring</p>
+        <div className="app-header-content">
+          <div>
+            <h1 className="app-title">InfraWatch</h1>
+            <p className="app-subtitle">Infrastructure Monitoring</p>
+          </div>
+          <button 
+            onClick={toggleTheme} 
+            className="theme-toggle"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
