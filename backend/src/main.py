@@ -1275,6 +1275,150 @@ async def stop_process(pid: int, force: bool = False):
         raise HTTPException(status_code=500, detail=f"Error terminating process: {str(e)}")
 
         
+@app.get("/api/v1/docker/container/{container_id}/logs", tags=["Docker"])
+async def get_container_logs(
+    container_id: str,
+    lines: int = 100,
+    timestamps: bool = False,
+    since: Optional[int] = None
+):
+    """
+    Получить логи контейнера
+    
+    Args:
+        container_id: ID или имя контейнера
+        lines: Количество последних строк (по умолчанию 100)
+        timestamps: Включить временные метки
+        since: Получить логи с момента (timestamp)
+    """
+    try:
+        # Проверяем существование контейнера
+        result = subprocess.run(
+            ["docker", "ps", "-a", "--filter", f"id={container_id}", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True
+        )
+        
+        if not result.stdout.strip():
+            # Пробуем по имени
+            result = subprocess.run(
+                ["docker", "ps", "-a", "--filter", f"name={container_id}", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True
+            )
+            if not result.stdout.strip():
+                raise HTTPException(status_code=404, detail=f"Container {container_id} not found")
+        
+        container_name = result.stdout.strip().split('\n')[0]
+        
+        # Формируем команду docker logs
+        cmd = ["docker", "logs"]
+        
+        if timestamps:
+            cmd.append("-t")
+        
+        if since:
+            cmd.extend(["--since", str(since)])
+        
+        # Ограничиваем количество строк через tail
+        cmd.extend(["--tail", str(lines), container_name])
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        # Docker logs может выводить в stderr, поэтому объединяем
+        output = result.stdout + result.stderr
+        
+        # Если пусто, возвращаем сообщение
+        if not output.strip():
+            return {
+                "container_id": container_id,
+                "container_name": container_name,
+                "logs": [],
+                "lines": 0,
+                "message": "No logs available"
+            }
+        
+        # Разбиваем на строки
+        log_lines = output.split('\n')
+        
+        return {
+            "container_id": container_id,
+            "container_name": container_name,
+            "logs": log_lines,
+            "lines": len(log_lines),
+            "timestamps": timestamps
+        }
+    
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Timeout getting container logs")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting logs: {str(e)}")
+
+
+@app.get("/api/v1/docker/container/{container_id}/logs/stream", tags=["Docker"])
+async def stream_container_logs(
+    container_id: str,
+    lines: int = 50
+):
+    """
+    Stream логов контейнера в реальном времени (Server-Sent Events)
+    
+    Args:
+        container_id: ID или имя контейнера
+        lines: Количество начальных строк
+    """
+    from fastapi.responses import StreamingResponse
+    import asyncio
+    
+    async def event_generator():
+        try:
+            # Сначала отправляем последние N строк
+            initial_logs = subprocess.run(
+                ["docker", "logs", "--tail", str(lines), container_id],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            initial_output = initial_logs.stdout + initial_logs.stderr
+            if initial_output:
+                yield f"data: {initial_output}\n\n"
+            
+            # Затем следим за новыми логами через docker logs -f
+            process = subprocess.Popen(
+                ["docker", "logs", "-f", "--tail", "0", container_id],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
+            
+            while True:
+                line = process.stdout.readline()
+                if line:
+                    yield f"data: {line}\n\n"
+                elif process.poll() is not None:
+                    break
+                await asyncio.sleep(0.1)
+                
+        except Exception as e:
+            yield f"data: Error: {str(e)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

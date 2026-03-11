@@ -1988,3 +1988,167 @@
 [data-theme="light"] .metric-value-download {
   color: #3b82f6;
 }
+
+/* ========== LOGS MODAL ========== */
+.logs-modal-overlay {
+  @apply fixed inset-0 flex items-center justify-center z-50 p-4;
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.logs-modal {
+  @apply rounded-xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.logs-modal-header {
+  @apply flex items-center justify-between p-4 gap-4 flex-shrink-0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.logs-modal-title {
+  @apply flex items-center gap-3;
+}
+
+.logs-modal-title svg {
+  @apply w-5 h-5;
+  color: var(--primary-purple);
+}
+
+.logs-modal-title h3 {
+  @apply text-lg font-semibold;
+  color: var(--text-primary);
+}
+
+.logs-modal-controls {
+  @apply flex items-center gap-3;
+}
+
+.logs-lines-select {
+  @apply px-3 py-1.5 rounded-lg text-sm font-medium;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-stream {
+  @apply flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors;
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.btn-stream:hover {
+  background-color: rgba(34, 197, 94, 0.25);
+}
+
+.btn-stream.active {
+  background-color: rgba(34, 197, 94, 0.25);
+  border-color: #22c55e;
+}
+
+.stream-indicator {
+  @apply w-2 h-2 rounded-full animate-pulse;
+  background-color: #22c55e;
+}
+
+.btn-refresh-logs {
+  @apply p-2 rounded-lg transition-colors;
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.btn-refresh-logs:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--primary-purple);
+}
+
+.btn-close-logs {
+  @apply p-2 rounded-lg transition-colors;
+  background-color: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.btn-close-logs:hover {
+  background-color: rgba(220, 38, 38, 0.2);
+  color: #dc2626;
+}
+
+.logs-modal-body {
+  @apply flex-1 overflow-auto p-4;
+  background-color: #0d1117;
+  max-height: calc(85vh - 80px);
+}
+
+.logs-loading,
+.logs-error,
+.logs-empty {
+  @apply flex flex-col items-center justify-center h-48 gap-3;
+}
+
+.logs-loading {
+  color: var(--primary-purple);
+}
+
+.logs-error {
+  color: var(--error-red);
+}
+
+.logs-empty {
+  color: var(--text-muted);
+}
+
+.logs-content {
+  @apply font-mono text-sm leading-relaxed;
+  color: #c9d1d9;
+  min-height: 100%;
+}
+
+.log-line {
+  @apply py-0.5 px-2 hover:bg-slate-800/50 rounded;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Light theme - Logs modal */
+[data-theme="light"] .logs-modal {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .logs-modal-header {
+  border-color: var(--border-color);
+}
+
+[data-theme="light"] .logs-modal-title h3 {
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .logs-lines-select {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .btn-refresh-logs,
+[data-theme="light"] .btn-close-logs {
+  background-color: var(--bg-card);
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .btn-refresh-logs:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--primary-purple);
+}
+
+[data-theme="light"] .logs-modal-body {
+  background-color: #f6f8fa;
+}
+
+[data-theme="light"] .logs-content {
+  color: #24292f;
+}
+
+[data-theme="light"] .log-line:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}

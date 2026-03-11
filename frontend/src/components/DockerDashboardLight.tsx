@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Package,
   Layers,
@@ -11,6 +11,9 @@ import {
   ChevronUp,
   AlertCircle,
   Trash2,
+  FileText,
+  X,
+  Play,
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -24,6 +27,16 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
   const [expandedContainers, setExpandedContainers] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Logs state
+  const [logsContainer, setLogsContainer] = useState<{ id: string; name: string } | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [logsStreaming, setLogsStreaming] = useState(false);
+  const [logLines, setLogLines] = useState(100);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   if (!dockerMetrics || !dockerMetrics.engine) {
     return (
@@ -198,6 +211,91 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
   };
 
   const diskUsage = getDiskUsage();
+
+  // Fetch container logs
+  const fetchLogs = async (containerId: string) => {
+    setLogsLoading(true);
+    setLogsError(null);
+    setLogs([]);
+    
+    try {
+      const response = await axios.get(
+        `http://localhost:8000/api/v1/docker/container/${containerId}/logs`,
+        { params: { lines: logLines, timestamps: true } }
+      );
+      
+      setLogs(response.data.logs || []);
+    } catch (error: any) {
+      setLogsError(error?.response?.data?.detail || error.message || 'Failed to fetch logs');
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  // Start streaming logs
+  const startLogStream = (containerId: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    
+    setLogsStreaming(true);
+    setLogs([]);
+    
+    const eventSource = new EventSource(
+      `http://localhost:8000/api/v1/docker/container/${containerId}/logs/stream?lines=${logLines}`
+    );
+    
+    eventSource.onmessage = (event) => {
+      setLogs(prev => [...prev, event.data]);
+    };
+    
+    eventSource.onerror = () => {
+      setLogsError('Connection lost or container stopped');
+      setLogsStreaming(false);
+      eventSource.close();
+    };
+    
+    eventSourceRef.current = eventSource;
+  };
+
+  // Stop streaming logs
+  const stopLogStream = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setLogsStreaming(false);
+  };
+
+  // Open logs modal
+  const openLogs = (containerId: string, containerName: string) => {
+    setLogsContainer({ id: containerId, name: containerName });
+    fetchLogs(containerId);
+  };
+
+  // Close logs modal
+  const closeLogs = () => {
+    stopLogStream();
+    setLogsContainer(null);
+    setLogs([]);
+    setLogsError(null);
+  };
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
 
   const tabs = [
     { id: 'containers', label: 'Containers', count: validContainers.length, icon: Package },
@@ -374,11 +472,12 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
                         {status.label === 'Running' && (
                           <div className="action-buttons">
                             <button
-                              onClick={() => handleContainerAction(container.id, 'pause')}
+                              onClick={() => openLogs(container.id, container.names?.[0] || container.id.substring(0, 12))}
                               className="btn btn-action"
-                              disabled={isRefreshing}
+                              title="View logs"
                             >
-                              Pause
+                              <FileText className="w-3 h-3" />
+                              Logs
                             </button>
                             <button
                               onClick={() => handleContainerAction(container.id, 'restart')}
@@ -399,6 +498,14 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
 
                         {status.label === 'Stopped' && (
                           <div className="action-buttons">
+                            <button
+                              onClick={() => openLogs(container.id, container.names?.[0] || container.id.substring(0, 12))}
+                              className="btn btn-action"
+                              title="View logs"
+                            >
+                              <FileText className="w-3 h-3" />
+                              Logs
+                            </button>
                             <button
                               onClick={() => handleContainerAction(container.id, 'start')}
                               className="btn btn-action"
@@ -660,6 +767,82 @@ const DockerDashboardLight: React.FC<DockerDashboardLightProps> = ({ data: docke
                   <Network className="w-8 h-8" />
                   <p>No networks found</p>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Logs Modal */}
+      {logsContainer && (
+        <div className="logs-modal-overlay" onClick={closeLogs}>
+          <div className="logs-modal" onClick={e => e.stopPropagation()}>
+            <div className="logs-modal-header">
+              <div className="logs-modal-title">
+                <FileText className="w-5 h-5" />
+                <h3>Logs: {logsContainer.name}</h3>
+              </div>
+              <div className="logs-modal-controls">
+                <select 
+                  value={logLines} 
+                  onChange={e => setLogLines(Number(e.target.value))}
+                  className="logs-lines-select"
+                >
+                  <option value={50}>50 lines</option>
+                  <option value={100}>100 lines</option>
+                  <option value={200}>200 lines</option>
+                  <option value={500}>500 lines</option>
+                  <option value={1000}>1000 lines</option>
+                </select>
+                {!logsStreaming ? (
+                  <button
+                    onClick={() => startLogStream(logsContainer.id)}
+                    className="btn-stream"
+                    title="Stream logs in real-time"
+                  >
+                    <Play className="w-4 h-4" />
+                    Stream
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopLogStream}
+                    className="btn-stream active"
+                  >
+                    <div className="stream-indicator" />
+                    Streaming...
+                  </button>
+                )}
+                <button onClick={() => fetchLogs(logsContainer.id)} className="btn-refresh-logs">
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button onClick={closeLogs} className="btn-close-logs">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="logs-modal-body">
+              {logsLoading && logs.length === 0 ? (
+                <div className="logs-loading">
+                  <RefreshCw className="w-6 h-6 spinning" />
+                  <span>Loading logs...</span>
+                </div>
+              ) : logsError ? (
+                <div className="logs-error">
+                  <AlertCircle className="w-5 h-5" />
+                  <span>{logsError}</span>
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="logs-empty">
+                  <FileText className="w-8 h-8" />
+                  <span>No logs available</span>
+                </div>
+              ) : (
+                <pre className="logs-content">
+                  {logs.map((line, i) => (
+                    <div key={i} className="log-line">{line}</div>
+                  ))}
+                  <div ref={logsEndRef} />
+                </pre>
               )}
             </div>
           </div>
