@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery, Sun, Moon } from 'lucide-react'
+import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery, Sun, Moon, Settings } from 'lucide-react'
 import axios from 'axios'
 import DockerDashboardLight from './components/DockerDashboardLight'
+import ProcessManager from './components/ProcessManager'
 import { api } from './services/api'
 import { AgentMetrics as AgentMetricsType } from './types/metrics'
 
@@ -1339,6 +1340,7 @@ const AppLight: React.FC = () => {
   const [agentsList, setAgentsList] = useState<string[]>([])
   const [agentsLoading, setAgentsLoading] = useState(true)
   const [showAgents, setShowAgents] = useState(true)
+  const [showProcessManager, setShowProcessManager] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // History for CPU and Memory charts
@@ -1595,9 +1597,14 @@ const AppLight: React.FC = () => {
             <section className="metrics-section">
               <div className="section-header">
                 <h2 className="section-title">Monitoring Agents</h2>
-                <button onClick={() => setShowAgents(!showAgents)} className="btn btn-sm">
-                  {showAgents ? 'Hide' : 'Show'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => setShowProcessManager(true)} className="btn btn-sm btn-primary">
+                    <Settings className="w-4 h-4" /> Process Manager
+                  </button>
+                  <button onClick={() => setShowAgents(!showAgents)} className="btn btn-sm">
+                    {showAgents ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
 
               {showAgents && (
@@ -1661,6 +1668,37 @@ const AppLight: React.FC = () => {
           data={batteryHistory}
           onClose={() => setShowBatteryChart(false)}
         />
+      )}
+
+      {/* Process Manager Modal */}
+      {showProcessManager && (
+        <div className="modal-overlay" onClick={() => setShowProcessManager(false)}>
+          <div className="modal-content" style={{ maxWidth: '1200px', width: '95%', maxHeight: '90vh', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Process Manager</h3>
+              <button onClick={() => setShowProcessManager(false)} className="btn-close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: '16px', maxHeight: 'calc(90vh - 60px)', overflow: 'auto' }}>
+              <ProcessManager 
+                processes={sysInfo?.processes?.top_cpu?.concat(sysInfo?.processes?.top_memory || []) || []}
+                onRefresh={() => {
+                  // Trigger refresh by updating state
+                  const fetchAll = async () => {
+                    try {
+                      const sysResp = await axios.get(`${API_BASE}/system`)
+                      setSysInfo(sysResp.data || null)
+                    } catch (e) {
+                      console.error('Error refreshing:', e)
+                    }
+                  }
+                  fetchAll()
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

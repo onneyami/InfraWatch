@@ -1275,6 +1275,184 @@ async def stop_process(pid: int, force: bool = False):
         raise HTTPException(status_code=500, detail=f"Error terminating process: {str(e)}")
 
         
+@app.get("/api/v1/process/{pid}", tags=["System"])
+async def get_process_details(pid: int):
+    """
+    Получить детальную информацию о процессе
+    
+    Args:
+        pid: Process ID
+    
+    Returns:
+        Детальная информация о процессе
+    """
+    try:
+        proc = psutil.Process(pid)
+        
+        # Вспомогательная функция для безопасного получения значений
+        def safe_get(func, default=None):
+            try:
+                result = func()
+                if hasattr(result, '_asdict'):
+                    return result._asdict()
+                return result
+            except (psutil.AccessDenied, PermissionError):
+                return default
+            except Exception:
+                return default
+        
+        # Основная информация (базовая, обычно доступна)
+        info = {
+            "pid": proc.pid,
+            "name": safe_get(lambda: proc.name(), "unknown"),
+            "status": safe_get(lambda: proc.status(), "unknown"),
+            "username": safe_get(lambda: proc.username(), "unknown"),
+            "create_time": safe_get(lambda: proc.create_time()),
+            "terminal": safe_get(lambda: proc.terminal()),
+            
+            # CPU
+            "cpu_percent": safe_get(lambda: proc.cpu_percent(interval=0.1), 0),
+            "cpu_times": safe_get(lambda: proc.cpu_times()._asdict() if proc.cpu_times() else None),
+            "cpu_num": safe_get(lambda: proc.cpu_num()),
+            "priority": safe_get(lambda: proc.nice(), 0),
+            
+            # Memory
+            "memory_percent": safe_get(lambda: proc.memory_percent(), 0),
+            "memory_info": safe_get(lambda: proc.memory_info()._asdict() if proc.memory_info() else None),
+            "memory_full_info": safe_get(lambda: proc.memory_full_info()._asdict() if hasattr(proc, 'memory_full_info') else None),
+            
+            # I/O
+            "io_counters": safe_get(lambda: proc.io_counters()._asdict() if hasattr(proc, 'io_counters') else None),
+            
+            # Network
+            "connections_count": safe_get(lambda: len(proc.connections()), 0),
+            
+            # Threads
+            "num_threads": safe_get(lambda: proc.num_threads(), 0),
+            "threads": safe_get(lambda: [{"id": t.id, "cpu_time": t.user_time + t.system_time} for t in proc.threads()], []),
+            
+            # Files
+            "open_files": safe_get(lambda: len(proc.open_files()), 0),
+            
+            # Command
+            "cmdline": safe_get(lambda: " ".join(proc.cmdline()) if proc.cmdline() else ""),
+            "exe": safe_get(lambda: proc.exe()),
+            "cwd": safe_get(lambda: proc.cwd()),
+            
+            # Parent
+            "ppid": safe_get(lambda: proc.ppid()),
+            "parent_name": safe_get(lambda: proc.parent().name() if proc.parent() else None),
+            
+            # Children
+            "children_count": safe_get(lambda: len(proc.children()), 0),
+            "children": safe_get(lambda: [{"pid": c.pid, "name": c.name()} for c in proc.children()], []),
+            
+            # Environment (может быть недоступно без прав)
+            "environ": safe_get(lambda: dict(proc.environ()) if hasattr(proc, 'environ') else None),
+        }
+        
+        # Uptime
+        if info["create_time"]:
+            info["uptime"] = time.time() - info["create_time"]
+            info["uptime_human"] = str(timedelta(seconds=int(info["uptime"])))
+        else:
+            info["uptime"] = 0
+            info["uptime_human"] = "unknown"
+        
+        return info
+    
+    except psutil.NoSuchProcess:
+        raise HTTPException(status_code=404, detail=f"Process with PID {pid} not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting process details: {str(e)}")
+
+
+@app.get("/api/v1/process/{pid}/tree", tags=["System"])
+async def get_process_tree(pid: int):
+    """
+    Получить дерево процессов
+    
+    Args:
+        pid: Process ID (root of tree)
+    
+    Returns:
+        Дерево процессов
+    """
+    def build_tree(process, level=0, max_depth=5):
+        if level > max_depth:
+            return None
+            
+        try:
+            node = {
+                "pid": process.pid,
+                "name": process.name(),
+                "status": process.status(),
+                "cpu_percent": process.cpu_percent(interval=0.01),
+                "memory_percent": process.memory_percent(),
+                "children": []
+            }
+            
+            for child in process.children():
+                child_node = build_tree(child, level + 1, max_depth)
+                if child_node:
+                    node["children"].append(child_node)
+            
+            return node
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return None
+    
+    try:
+        proc = psutil.Process(pid)
+        tree = build_tree(proc)
+        
+        if not tree:
+            raise HTTPException(status_code=404, detail=f"Process with PID {pid} not found")
+        
+        return {
+            "root_pid": pid,
+            "tree": tree
+        }
+    
+    except psutil.NoSuchProcess:
+        raise HTTPException(status_code=404, detail=f"Process with PID {pid} not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error building process tree: {str(e)}")
+
+
+@app.post("/api/v1/process/{pid}/priority", tags=["System"])
+async def set_process_priority(pid: int, priority: int):
+    """
+    Изменить приоритет процесса (nice value)
+    
+    Args:
+        pid: Process ID
+        priority: Nice value (-20 to 20, lower = higher priority)
+    
+    Returns:
+        Статус операции
+    """
+    try:
+        proc = psutil.Process(pid)
+        old_priority = proc.nice()
+        proc.nice(priority)
+        
+        return {
+            "status": "success",
+            "pid": pid,
+            "process_name": proc.name(),
+            "old_priority": old_priority,
+            "new_priority": priority,
+            "message": f"Process priority changed from {old_priority} to {priority}"
+        }
+    
+    except psutil.NoSuchProcess:
+        raise HTTPException(status_code=404, detail=f"Process with PID {pid} not found")
+    except psutil.AccessDenied:
+        raise HTTPException(status_code=403, detail=f"Permission denied to change priority for process {pid}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error changing process priority: {str(e)}")
+
+        
 @app.get("/api/v1/docker/container/{container_id}/logs", tags=["Docker"])
 async def get_container_logs(
     container_id: str,
@@ -1308,7 +1486,7 @@ async def get_container_logs(
             )
             if not result.stdout.strip():
                 raise HTTPException(status_code=404, detail=f"Container {container_id} not found")
-        
+            
         container_name = result.stdout.strip().split('\n')[0]
         
         # Формируем команду docker logs

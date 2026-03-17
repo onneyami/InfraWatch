@@ -2152,3 +2152,357 @@
 [data-theme="light"] .log-line:hover {
   background-color: rgba(0, 0, 0, 0.05);
 }
+
+/* ===== PROCESS MANAGER STYLES ===== */
+.process-manager {
+  @apply w-full space-y-4;
+}
+
+.process-controls-bar {
+  @apply flex gap-3 items-center flex-wrap mb-4;
+}
+
+.search-box {
+  @apply flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px];
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.search-box svg {
+  color: var(--text-muted);
+}
+
+.process-search-input {
+  @apply flex-1 bg-transparent border-none outline-none text-sm;
+  color: var(--text-primary);
+}
+
+.process-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.process-filter-select,
+.process-sort-select {
+  @apply px-3 py-2 rounded-lg text-sm cursor-pointer;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.process-sort-controls {
+  @apply flex items-center gap-1;
+}
+
+.btn-sort-dir {
+  @apply p-2 rounded-lg transition-colors;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-sort-dir:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.btn-refresh-processes {
+  @apply p-2 rounded-lg transition-colors;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-refresh-processes:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.action-result {
+  @apply px-4 py-3 rounded-lg mb-4 text-sm font-medium;
+}
+
+.action-result.success {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--success-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.action-result.error {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--error-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.process-count {
+  @apply text-sm mb-2;
+  color: var(--text-muted);
+}
+
+.process-list-container {
+  @apply overflow-x-auto rounded-lg;
+  border: 1px solid var(--border-color);
+}
+
+.process-table {
+  @apply w-full text-sm;
+  border-collapse: collapse;
+}
+
+.process-table thead {
+  background-color: var(--bg-tertiary);
+}
+
+.process-table th {
+  @apply px-4 py-3 text-left font-semibold text-xs uppercase tracking-wider;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.process-table td {
+  @apply px-4 py-2;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.process-row {
+  @apply cursor-pointer transition-colors;
+}
+
+.process-row:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.process-row.selected {
+  background-color: rgba(139, 92, 246, 0.1);
+}
+
+.process-pid {
+  @apply font-mono font-semibold;
+  color: var(--text-primary);
+}
+
+.process-name {
+  @apply font-medium;
+  color: var(--text-primary);
+}
+
+.process-cpu {
+  @apply font-mono;
+  color: var(--text-secondary);
+}
+
+.process-cpu.high {
+  color: var(--error-red);
+}
+
+.process-mem {
+  @apply font-mono;
+  color: var(--text-secondary);
+}
+
+.process-user {
+  color: var(--text-muted);
+}
+
+.status-badge {
+  @apply px-2 py-1 rounded text-xs font-semibold;
+}
+
+.status-running {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--success-green);
+}
+
+.status-sleeping {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.status-stopped {
+  background-color: rgba(148, 163, 184, 0.2);
+  color: var(--text-muted);
+}
+
+.status-zombie {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--error-red);
+}
+
+.process-actions {
+  @apply flex gap-1;
+}
+
+.btn-process-action {
+  @apply p-1.5 rounded transition-colors disabled:opacity-50;
+}
+
+.btn-terminate {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: var(--warning-yellow);
+}
+
+.btn-terminate:hover {
+  background-color: rgba(245, 158, 11, 0.3);
+}
+
+.btn-kill {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--error-red);
+}
+
+.btn-kill:hover {
+  background-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-info {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.btn-info:hover {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Process Details Modal */
+.process-details-modal {
+  @apply max-w-4xl w-full;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.process-detail-stats {
+  @apply grid grid-cols-4 gap-4 mb-6;
+}
+
+.process-detail-stats .stat-item {
+  @apply flex flex-col items-center p-4 rounded-lg;
+  background-color: var(--bg-tertiary);
+}
+
+.process-detail-stats .stat-label {
+  @apply text-xs mb-1;
+  color: var(--text-muted);
+}
+
+.process-detail-stats .stat-value {
+  @apply text-xl font-bold;
+  color: var(--primary-purple);
+}
+
+.process-detail-grid {
+  @apply grid grid-cols-2 gap-4;
+}
+
+.detail-section {
+  @apply p-4 rounded-lg;
+  background-color: var(--bg-tertiary);
+}
+
+.detail-section h4 {
+  @apply text-sm font-semibold mb-3 pb-2;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.detail-section.full-width {
+  @apply col-span-2;
+}
+
+.detail-row {
+  @apply flex justify-between items-center py-2 text-sm;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row span:first-child {
+  color: var(--text-muted);
+}
+
+.detail-row span:last-child {
+  color: var(--text-primary);
+}
+
+.btn-change-priority {
+  @apply ml-2 px-2 py-1 rounded text-xs;
+  background-color: rgba(139, 92, 246, 0.2);
+  color: var(--primary-purple);
+}
+
+.btn-change-priority:hover {
+  background-color: rgba(139, 92, 246, 0.3);
+}
+
+.cmdline {
+  @apply block p-3 rounded text-xs overflow-x-auto;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.children-list {
+  @apply space-y-2 max-h-40 overflow-y-auto;
+}
+
+.child-process {
+  @apply flex justify-between items-center p-2 rounded text-sm;
+  background-color: var(--bg-secondary);
+}
+
+.process-detail-actions {
+  @apply flex gap-3 mt-6 pt-6;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-action {
+  @apply px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50;
+}
+
+.btn-action.btn-terminate {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: var(--warning-yellow);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.btn-action.btn-terminate:hover {
+  background-color: rgba(245, 158, 11, 0.3);
+}
+
+.btn-action.btn-kill {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--error-red);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-action.btn-kill:hover {
+  background-color: rgba(239, 68, 68, 0.3);
+}
+
+.loading-spinner {
+  @apply flex items-center justify-center py-8;
+  color: var(--text-muted);
+}
+
+/* Responsive for process manager */
+@media (max-width: 768px) {
+  .process-controls-bar {
+    @apply flex-col items-stretch;
+  }
+  
+  .search-box {
+    @apply w-full;
+  }
+  
+  .process-detail-stats {
+    @apply grid-cols-2;
+  }
+  
+  .process-detail-grid {
+    @apply grid-cols-1;
+  }
+  
+  .detail-section.full-width {
+    @apply col-span-1;
+  }
+}
