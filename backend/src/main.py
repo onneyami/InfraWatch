@@ -283,6 +283,9 @@ metrics_history = defaultdict(list)
 agents_registry = {}
 agent_last_seen = {}
 
+# Хранилище истории процессов {pid: [{cpu, memory, timestamp, name}, ...]}
+process_history = defaultdict(list)
+
 # Предыдущее состояние системных сетевых счётчиков для расчёта скорости (bytes/sec)
 system_net_prev = {
     "ts": time.time(),
@@ -378,6 +381,25 @@ async def receive_metrics(request: Request):
         # Ограничиваем историю
         if len(metrics_history[agent_id]) > MAX_HISTORY:
             metrics_history[agent_id] = metrics_history[agent_id][-MAX_HISTORY:]
+        
+        # Сохраняем историю процессов
+        if metrics.processes:
+            current_time = time.time()
+            for proc in metrics.processes:
+                proc_entry = {
+                    "cpu_percent": proc.cpu_percent,
+                    "memory_percent": proc.memory_percent,
+                    "memory_rss": proc.memory_rss,
+                    "memory_vms": proc.memory_vms,
+                    "status": proc.status,
+                    "num_threads": proc.num_threads,
+                    "timestamp": current_time,
+                    "name": proc.name
+                }
+                process_history[proc.pid].append(proc_entry)
+                # Ограничиваем историю процесса (последние 100 записей)
+                if len(process_history[proc.pid]) > 100:
+                    process_history[proc.pid] = process_history[proc.pid][-100:]
         
         # Логируем получение метрик
         print(f"📊 Received metrics from {agent_id}: "
@@ -1451,6 +1473,60 @@ async def set_process_priority(pid: int, priority: int):
         raise HTTPException(status_code=403, detail=f"Permission denied to change priority for process {pid}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error changing process priority: {str(e)}")
+
+        
+@app.get("/api/v1/process/{pid}/history", tags=["System"])
+async def get_process_history(pid: int, limit: int = 50):
+    """
+    Получить историю потребления ресурсов процессом
+    
+    Args:
+        pid: Process ID
+        limit: Максимальное количество записей
+    
+    Returns:
+        История CPU и Memory потребления процесса
+    """
+    try:
+        if pid not in process_history or not process_history[pid]:
+            return {
+                "pid": pid,
+                "history": [],
+                "count": 0,
+                "message": "No history available for this process"
+            }
+        
+        history = process_history[pid][-limit:]
+        
+        # Вычисляем статистику
+        cpu_values = [h["cpu_percent"] for h in history if h.get("cpu_percent") is not None]
+        memory_values = [h["memory_percent"] for h in history if h.get("memory_percent") is not None]
+        
+        stats = {
+            "cpu": {
+                "min": min(cpu_values) if cpu_values else 0,
+                "max": max(cpu_values) if cpu_values else 0,
+                "avg": statistics.mean(cpu_values) if cpu_values else 0,
+                "current": cpu_values[-1] if cpu_values else 0
+            },
+            "memory": {
+                "min": min(memory_values) if memory_values else 0,
+                "max": max(memory_values) if memory_values else 0,
+                "avg": statistics.mean(memory_values) if memory_values else 0,
+                "current": memory_values[-1] if memory_values else 0
+            }
+        }
+        
+        return {
+            "pid": pid,
+            "process_name": history[-1].get("name", "unknown") if history else "unknown",
+            "history": history,
+            "count": len(history),
+            "statistics": stats
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting process history: {str(e)}")
 
         
 @app.get("/api/v1/docker/container/{container_id}/logs", tags=["Docker"])

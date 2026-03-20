@@ -38,6 +38,14 @@ interface ProcessInfo {
   username?: string
 }
 
+// Типы для истории процесса
+interface ProcessHistoryEntry {
+  cpu_percent: number
+  memory_percent: number
+  timestamp: number
+  name: string
+}
+
 // ========== AGENT METRICS LIGHT - С детальной информацией ==========
 const AgentMetricsLight: React.FC<{ agentId: string; initialMetrics?: AgentMetricsType }> = ({ agentId, initialMetrics }) => {
   const [metrics, setMetrics] = useState<AgentMetricsType | null>(initialMetrics || null)
@@ -49,6 +57,8 @@ const AgentMetricsLight: React.FC<{ agentId: string; initialMetrics?: AgentMetri
   const [showAllProcesses, setShowAllProcesses] = useState(false)
   const [stoppingProcess, setStoppingProcess] = useState<number | null>(null)
   const [selectedProcess, setSelectedProcess] = useState<ProcessInfo | null>(null)
+  const [processHistory, setProcessHistory] = useState<ProcessHistoryEntry[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -112,6 +122,30 @@ const AgentMetricsLight: React.FC<{ agentId: string; initialMetrics?: AgentMetri
       setStoppingProcess(null)
     }
   }
+
+  const fetchProcessHistory = async (pid: number) => {
+    setLoadingHistory(true)
+    try {
+      const res = await axios.get(`${API_BASE}/process/${pid}/history?limit=30`)
+      if (res.data.history) {
+        setProcessHistory(res.data.history)
+      }
+    } catch (e) {
+      console.error('Error fetching process history:', e)
+      setProcessHistory([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  // Загружаем историю процесса при его выборе
+  useEffect(() => {
+    if (selectedProcess) {
+      fetchProcessHistory(selectedProcess.pid)
+    } else {
+      setProcessHistory([])
+    }
+  }, [selectedProcess?.pid])
 
   const sortedProcesses = React.useMemo(() => {
     if (!metrics?.processes) return []
@@ -311,7 +345,7 @@ const AgentMetricsLight: React.FC<{ agentId: string; initialMetrics?: AgentMetri
       {/* Process Detail Modal */}
       {selectedProcess && (
         <div className="modal-overlay" onClick={() => setSelectedProcess(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: '600px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{selectedProcess.name}</h3>
               <button onClick={() => setSelectedProcess(null)} className="btn-close">
@@ -343,6 +377,103 @@ const AgentMetricsLight: React.FC<{ agentId: string; initialMetrics?: AgentMetri
                   </div>
                 )}
               </div>
+
+              {/* Process History Chart */}
+              {processHistory.length > 0 && (
+                <div style={{ marginTop: '16px' }}>
+                  <h4 style={{ fontSize: '14px', marginBottom: '12px', color: '#94a3b8' }}>Resource History</h4>
+                  
+                  {/* Legend */}
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '16px', height: '2px', background: '#a78bfa' }} />
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>CPU</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '16px', height: '2px', background: '#22c55e' }} />
+                      <span style={{ fontSize: '11px', color: '#94a3b8' }}>Memory</span>
+                    </div>
+                  </div>
+
+                  {/* Chart */}
+                  <div style={{ display: 'flex', marginBottom: '4px' }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      justifyContent: 'space-between',
+                      paddingRight: '6px',
+                      fontSize: '10px',
+                      fontFamily: 'monospace',
+                      color: '#64748b'
+                    }}>
+                      <span>100%</span>
+                      <span>50%</span>
+                      <span>0%</span>
+                    </div>
+                    <div style={{ flex: 1, height: '120px', background: 'rgba(15, 23, 42, 0.6)', borderRadius: '6px', padding: '6px' }}>
+                      <svg viewBox="0 0 100 60" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+                        {/* Grid lines */}
+                        {[0, 25, 50, 75, 100].map(y => (
+                          <line key={`g-${y}`} x1="0" y1={y * 0.6} x2="100" y2={y * 0.6} stroke="rgba(51,65,85,0.4)" strokeWidth="0.3" />
+                        ))}
+
+                        {/* CPU polyline */}
+                        {processHistory.length > 1 && (
+                          <path 
+                            d={`M ${processHistory.map((h, i) => {
+                              const x = (i / (processHistory.length - 1)) * 100
+                              const y = 60 - (Math.min(h.cpu_percent, 100) / 100) * 60
+                              return `${x},${y}`
+                            }).join(' L ')}`}
+                            fill="none" 
+                            stroke="#a78bfa" 
+                            strokeWidth="0.8"
+                          />
+                        )}
+                        
+                        {/* Memory polyline */}
+                        {processHistory.length > 1 && (
+                          <path 
+                            d={`M ${processHistory.map((h, i) => {
+                              const x = (i / (processHistory.length - 1)) * 100
+                              const y = 60 - (Math.min(h.memory_percent, 100) / 100) * 60
+                              return `${x},${y}`
+                            }).join(' L ')}`}
+                            fill="none" 
+                            stroke="#22c55e" 
+                            strokeWidth="0.8"
+                          />
+                        )}
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  {processHistory.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
+                      <div style={{ background: 'rgba(167, 139, 250, 0.1)', padding: '8px', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '10px', color: '#94a3b8' }}>CPU Avg</div>
+                        <div style={{ fontSize: '14px', color: '#a78bfa', fontWeight: '600' }}>
+                          {(processHistory.reduce((a, b) => a + b.cpu_percent, 0) / processHistory.length).toFixed(1)}%
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '8px', borderRadius: '6px' }}>
+                        <div style={{ fontSize: '10px', color: '#94a3b8' }}>Memory Avg</div>
+                        <div style={{ fontSize: '14px', color: '#22c55e', fontWeight: '600' }}>
+                          {(processHistory.reduce((a, b) => a + b.memory_percent, 0) / processHistory.length).toFixed(1)}%
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {loadingHistory && (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>
+                  Loading history...
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button
                   onClick={() => handleStopProcess(selectedProcess.pid, selectedProcess.name)}
