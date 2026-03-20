@@ -337,7 +337,8 @@
   }
 
   .btn-primary {
-    @apply text-white hover:scale-105 hover:shadow-lg;
+    color: #ffffff !important;
+    @apply hover:scale-105 hover:shadow-lg;
     background: linear-gradient(135deg, var(--primary-purple), #3b82f6);
     box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
   }
