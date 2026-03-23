@@ -3,8 +3,12 @@
 > vite
 
 
-  VITE v5.4.21  ready in 970 ms
+  VITE v5.4.21  ready in 855 ms
 
   ➜  Local:   http://localhost:5173/
-  ➜  Network: http://192.168.31.9:5173/
-7:55:36 PM [vite] hmr update /src/light.css
+  ➜  Network: http://192.168.31.11:5173/
+8:45:33 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+8:46:21 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+8:47:16 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+8:48:06 AM [vite] hmr update /src/AppLight.tsx, /src/light.css
+8:49:00 AM [vite] hmr update /src/AppLight.tsx, /src/light.css

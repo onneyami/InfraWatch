@@ -939,10 +939,11 @@
 }
 
 .btn-scan {
-  @apply px-4 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50;
-  background-color: rgba(139, 92, 246, 0.2);
-  color: var(--primary-purple);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  @apply px-4 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 text-sm font-medium hover:bg-purple-500/30 transition-colors disabled:opacity-50;
+}
+
+.btn-scan-secrets {
+  @apply px-4 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 text-sm font-medium hover:bg-yellow-500/30 transition-colors disabled:opacity-50;
 }
 
 .btn-scan:hover {

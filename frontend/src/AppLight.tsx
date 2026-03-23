@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
-import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery, Sun, Moon, Settings } from 'lucide-react'
+import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDown, ChevronUp, ArrowUpDown, Eye, Square, X, ExternalLink, BarChart3, Battery, Sun, Moon, Settings, Key, CheckCircle, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import DockerDashboardLight from './components/DockerDashboardLight'
 import ProcessManager from './components/ProcessManager'
@@ -502,6 +502,11 @@ const VulnerabilityScannerLight: React.FC = () => {
   const [showAllVulns, setShowAllVulns] = useState(false)
   const [selectedVuln, setSelectedVuln] = useState<any>(null)
 
+  // Secrets scanning state
+  const [scanningSecrets, setScanningSecrets] = useState<string | null>(null)
+  const [secretsResult, setSecretsResult] = useState<any>(null)
+  const [showSecretsModal, setShowSecretsModal] = useState(false)
+
   const fetchImages = async () => {
     setLoading(true)
     try {
@@ -523,6 +528,21 @@ const VulnerabilityScannerLight: React.FC = () => {
       setScanResult({ status: 'error', message: e.message })
     } finally {
       setScanning(null)
+    }
+  }
+
+  const handleScanSecrets = async (name: string) => {
+    setScanningSecrets(name)
+    setSecretsResult(null)
+    try {
+      const res = await axios.post(`${API_BASE}/docker/image/secrets-scan`, { image_name: name })
+      setSecretsResult(res.data)
+      setShowSecretsModal(true)
+    } catch (e: any) {
+      setSecretsResult({ status: 'error', message: e.message })
+      setShowSecretsModal(true)
+    } finally {
+      setScanningSecrets(null)
     }
   }
 
@@ -572,13 +592,23 @@ const VulnerabilityScannerLight: React.FC = () => {
                 <span className="vuln-image-name">{img.name || img.id?.slice(0, 12)}</span>
                 <span className="vuln-image-size">{formatSize(img.size)}</span>
               </div>
-              <button
-                onClick={() => handleScan(img.name)}
-                disabled={scanning !== null}
-                className="btn-scan"
-              >
-                {scanning === img.name ? 'Scanning...' : 'Scan'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleScanSecrets(img.name)}
+                  disabled={scanningSecrets !== null || scanning !== null}
+                  className="btn-scan-secrets"
+                  title="Scan for secrets (API keys, passwords, tokens)"
+                >
+                  {scanningSecrets === img.name ? 'Scanning...' : <><Key className="w-4 h-4" /> Secrets</>}
+                </button>
+                <button
+                  onClick={() => handleScan(img.name)}
+                  disabled={scanning !== null || scanningSecrets !== null}
+                  className="btn-scan"
+                >
+                  {scanning === img.name ? 'Scanning...' : 'Scan'}
+                </button>
+              </div>
             </div>
           ))
         )}
@@ -589,7 +619,7 @@ const VulnerabilityScannerLight: React.FC = () => {
         <div className="vuln-result">
           {scanResult.status === 'error' ? (
             <div className="vuln-error">
-              <span>❌</span>
+              <AlertCircle className="w-5 h-5 text-red-400" />
               <span>{scanResult.message || 'Scan failed'}</span>
             </div>
           ) : scanResult.summary ? (
@@ -754,6 +784,139 @@ const VulnerabilityScannerLight: React.FC = () => {
                     ))}
                   </ul>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Secrets Scan Modal */}
+      {showSecretsModal && secretsResult && (
+        <div className="modal-overlay" onClick={() => setShowSecretsModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '800px', width: '95%', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Shield className="w-5 h-5 text-yellow-400" />
+                <h3>Secrets Scan: {secretsResult.image}</h3>
+              </div>
+              <button onClick={() => setShowSecretsModal(false)} className="btn-close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="modal-body">
+              {secretsResult.status === 'error' ? (
+                <div className="vuln-error">
+                  <AlertCircle className="w-5 h-5 text-red-400" />
+                  <span>{secretsResult.error || secretsResult.message || 'Scan failed'}</span>
+                </div>
+              ) : secretsResult.status === 'warning' ? (
+                <div className="vuln-error" style={{ background: 'rgba(234, 179, 8, 0.1)' }}>
+                  <AlertCircle className="w-5 h-5 text-yellow-400" />
+                  <span>{secretsResult.message}</span>
+                </div>
+              ) : (
+                <>
+                  {/* Summary */}
+                  <div className="vuln-summary" style={{ marginBottom: '16px' }}>
+                    <span className="summary-badge" style={{ background: '#dc2626' }}>
+                      {secretsResult.summary?.critical || 0} Critical
+                    </span>
+                    <span className="summary-badge" style={{ background: '#ea580c' }}>
+                      {secretsResult.summary?.high || 0} High
+                    </span>
+                    <span className="summary-badge" style={{ background: '#eab308' }}>
+                      {secretsResult.summary?.medium || 0} Medium
+                    </span>
+                    <span className="summary-badge" style={{ background: '#3b82f6' }}>
+                      {secretsResult.summary?.low || 0} Low
+                    </span>
+                  </div>
+
+                  {/* Secret Types */}
+                  {secretsResult.secret_types && Object.keys(secretsResult.secret_types).length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <h4 style={{ fontSize: '14px', marginBottom: '8px', color: '#94a3b8' }}>Secret Types Found:</h4>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {Object.entries(secretsResult.secret_types).map(([type, count]) => (
+                          <span key={type} style={{
+                            padding: '4px 10px',
+                            background: 'rgba(234, 179, 8, 0.1)',
+                            border: '1px solid rgba(234, 179, 8, 0.3)',
+                            borderRadius: '4px',
+                            fontSize: '12px',
+                            color: '#fbbf24'
+                          }}>
+                            {type}: {count as number}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Secrets List */}
+                  {secretsResult.secrets && secretsResult.secrets.length > 0 ? (
+                    <div className="secrets-list">
+                      <h4 style={{ fontSize: '14px', marginBottom: '12px', color: '#94a3b8' }}>
+                        Found {secretsResult.secrets.length} Secrets
+                      </h4>
+                      {secretsResult.secrets.map((secret: any, idx: number) => (
+                        <div key={idx} style={{
+                          padding: '12px',
+                          background: 'rgba(30, 41, 59, 0.5)',
+                          border: '1px solid #334155',
+                          borderRadius: '8px',
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                background: secret.severity === 'CRITICAL' ? '#dc2626' : 
+                                           secret.severity === 'HIGH' ? '#ea580c' :
+                                           secret.severity === 'MEDIUM' ? '#eab308' : '#3b82f6',
+                                color: 'white'
+                              }}>
+                                {secret.severity}
+                              </span>
+                              <span style={{ fontWeight: '600', color: '#f1f5f9' }}>{secret.title}</span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: '#64748b' }}>{secret.category}</span>
+                          </div>
+                          
+                          <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                            <div style={{ marginBottom: '4px' }}>
+                              <strong>File:</strong> {secret.file}:{secret.line}
+                            </div>
+                            {secret.description && (
+                              <div style={{ marginBottom: '4px' }}>
+                                <strong>Description:</strong> {secret.description}
+                              </div>
+                            )}
+                            <div style={{ 
+                              padding: '6px 10px', 
+                              background: 'rgba(0,0,0,0.3)', 
+                              borderRadius: '4px', 
+                              fontFamily: 'monospace',
+                              fontSize: '11px',
+                              color: '#fbbf24',
+                              marginTop: '8px'
+                            }}>
+                              {secret.masked_value}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="vuln-success">
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                      <span>No secrets found!</span>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

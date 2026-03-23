@@ -1250,6 +1250,48 @@ async def scan_image_by_name(request_data: Dict[str, str], background_tasks: Bac
             detail=f"Error during scan: {str(e)}"
         )
 
+
+@app.post("/api/v1/docker/image/secrets-scan")
+async def scan_image_secrets(request_data: Dict[str, str]):
+    """
+    Сканирует Docker образ на секреты (API ключи, пароли, токены)
+    
+    Payload:
+        {
+            "image_name": "nginx:latest"
+        }
+    
+    Returns:
+        Найденные секреты с маскированными значениями
+    """
+    try:
+        image_name = request_data.get("image_name", "").strip()
+        
+        if not image_name:
+            raise HTTPException(status_code=400, detail="image_name is required")
+        
+        # Проверяем доступность Trivy
+        if not TrivyScanner.check_trivy_installed():
+            return {
+                "status": "warning",
+                "image": image_name,
+                "message": "Trivy is not installed. Install with: brew install trivy (macOS) or apt-get install trivy (Linux)",
+                "trivy_available": False
+            }
+        
+        # Запускаем сканирование секретов
+        result = trivy_scanner.scan_secrets(image_name)
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error during secrets scan: {str(e)}"
+        )
+        
 @app.post("/api/v1/process/{pid}/stop", tags=["System"])
 async def stop_process(pid: int, force: bool = False):
     """

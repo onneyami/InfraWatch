@@ -236,6 +236,157 @@ class TrivyScanner:
             logger.error(f"Error getting Docker images: {e}")
             return []
 
+    @staticmethod
+    def scan_secrets(image_name: str) -> Dict[str, Any]:
+        """
+        Сканирует Docker образ на секреты с помощью Trivy
+
+        Args:
+            image_name: Имя или ID образа
+        
+        Returns:
+            Dict с результатами сканирования секретов
+        """
+        try:
+            # Запускаем Trivy с сканером секретов
+            result = subprocess.run(
+                [
+                    "trivy",
+                    "image",
+                    "--scanners", "secret",
+                    "--format", "json",
+                    image_name
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if result.returncode in [0, 1]:
+                try:
+                    report = json.loads(result.stdout)
+                    return TrivyScanner._parse_secrets_report(report, image_name)
+                except json.JSONDecodeError:
+                    return {
+                        "image": image_name,
+                        "status": "error",
+                        "error": "Failed to parse Trivy secrets output",
+                        "raw_output": result.stdout[:500],
+                        "timestamp": datetime.now().isoformat()
+                    }
+            else:
+                return {
+                    "image": image_name,
+                    "status": "error",
+                    "error": result.stderr or "Trivy secrets scan failed",
+                    "timestamp": datetime.now().isoformat()
+                }
+        
+        except subprocess.TimeoutExpired:
+            return {
+                "image": image_name,
+                "status": "error",
+                "error": "Scan timeout (exceeded 120 seconds)",
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Trivy secrets scan error for {image_name}: {e}")
+            return {
+                "image": image_name,
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    @staticmethod
+    def _parse_secrets_report(report: Dict, image_name: str) -> Dict[str, Any]:
+        """
+        Парсит результат сканирования секретов
+        
+        Args:
+            report: Raw JSON от Trivy
+            image_name: Имя образа
+        
+        Returns:
+            Отформатированный результат с найденными секретами
+        """
+        secrets = []
+        secrets_seen = set()  # Для дедубликации
+        summary = {
+            "total": 0,
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+        }
+        
+        # Категории секретов
+        secret_types = {}
+        
+        results = report.get("Results", [])
+        for result in results:
+            secrets_list = result.get("Secrets", [])
+            for secret in secrets_list:
+                secret_id = f"{secret.get('RuleID', '')}-{secret.get('Target', '')}"
+                
+                if secret_id in secrets_seen:
+                    continue
+                secrets_seen.add(secret_id)
+                
+                severity = secret.get("Severity", "UNKNOWN").upper()
+                severity_lower = severity.lower()
+                
+                # Обновляем статистику
+                summary["total"] += 1
+                if severity_lower in summary:
+                    summary[severity_lower] += 1
+                
+                # Категоризация по типу
+                category = secret.get("Category", "Unknown")
+                if category not in secret_types:
+                    secret_types[category] = 0
+                secret_types[category] += 1
+                
+                # Маскируем часть значения для безопасности
+                raw_value = secret.get("Match", "")
+                masked_value = TrivyScanner._mask_secret(raw_value)
+                
+                secrets.append({
+                    "id": secret.get("RuleID", "N/A"),
+                    "title": secret.get("Title", "Secret detected"),
+                    "category": category,
+                    "severity": severity,
+                    "description": secret.get("Description", ""),
+                    "file": secret.get("Target", ""),
+                    "line": secret.get("StartLine", 0),
+                    "end_line": secret.get("EndLine", 0),
+                    "masked_value": masked_value,
+                    "match": secret.get("Match", "")[:50] + "..." if len(secret.get("Match", "")) > 50 else secret.get("Match", "")
+                })
+        
+        return {
+            "image": image_name,
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "summary": summary,
+            "secrets": secrets,
+            "secret_types": secret_types,
+            "scan_tool": "trivy",
+            "scan_type": "secrets"
+        }
+    
+    @staticmethod
+    def _mask_secret(value: str) -> str:
+        """Маскирует секрет для безопасного отображения"""
+        if not value:
+            return "***"
+        
+        if len(value) <= 8:
+            return "*" * len(value)
+        
+        # Показываем только первые 4 и последние 4 символа
+        return f"{value[:4]}{'*' * (len(value) - 8)}{value[-4:]}"
+
 
 # Глобальный экземпляр сканера
 trivy_scanner = TrivyScanner()
