@@ -3,6 +3,7 @@ import { Server, Shield, Activity, Cpu, MemoryStick, HardDrive, Clock, ChevronDo
 import axios from 'axios'
 import DockerDashboardLight from './components/DockerDashboardLight'
 import ProcessManager from './components/ProcessManager'
+import CISScanner from './components/CISScanner'
 import { api } from './services/api'
 import { AgentMetrics as AgentMetricsType } from './types/metrics'
 
@@ -1885,6 +1886,14 @@ const AppLight: React.FC = () => {
                 <h2 className="section-title">Image Vulnerability Scanner</h2>
               </div>
               <VulnerabilityScannerLight />
+            </section>
+
+            {/* CIS Docker Benchmark Scanner */}
+            <section className="docker-section">
+              <div className="section-header">
+                <h2 className="section-title">CIS Docker Benchmark</h2>
+              </div>
+              <CISScanner />
             </section>
 
             {/* Monitoring Agents Section - Light */}

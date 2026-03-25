@@ -16,6 +16,7 @@ import subprocess
 from .health_check import router as health_router
 from .docker_simple import SimpleDockerMetrics
 from .trivy_scanner import trivy_scanner, TrivyScanner
+from .cis_scanner import run_cis_scan, CISScanResult
 
 app = FastAPI(
     title="InfraWatch API v2.5",
@@ -1713,6 +1714,74 @@ async def stream_container_logs(
             "Connection": "keep-alive",
         }
     )
+
+
+# CIS Docker Benchmark Scanner Endpoints
+@app.get("/api/v1/docker/cis/scan", tags=["Security"])
+async def run_cis_benchmark_scan():
+    """
+    Запуск CIS Docker Benchmark сканирования
+    
+    Проверяет Docker хост и контейнеры по стандартам CIS Docker Benchmark 1.4.0
+    
+    Returns:
+        Результаты сканирования со списком проверенных правил
+    """
+    try:
+        result = run_cis_scan()
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"CIS scan error: {str(e)}"
+        )
+
+
+@app.get("/api/v1/docker/cis/categories", tags=["Security"])
+async def get_cis_categories():
+    """
+    Получить список категорий CIS Docker Benchmark
+    
+    Returns:
+        Список категорий с описанием
+    """
+    categories = [
+        {
+            "id": "Host",
+            "name": "Host Configuration",
+            "description": "Security checks for the Docker host system",
+            "checks_count": 3
+        },
+        {
+            "id": "Daemon",
+            "name": "Docker Daemon Configuration",
+            "description": "Docker daemon configuration security",
+            "checks_count": 3
+        },
+        {
+            "id": "Container",
+            "name": "Container Runtime",
+            "description": "Container security settings and best practices",
+            "checks_count": 8
+        },
+        {
+            "id": "Image",
+            "name": "Container Images",
+            "description": "Image security and best practices",
+            "checks_count": 4
+        },
+        {
+            "id": "Operations",
+            "name": "Security Operations",
+            "description": "Operational security practices",
+            "checks_count": 1
+        }
+    ]
+    
+    return {
+        "categories": categories,
+        "total_checks": sum(c["checks_count"] for c in categories)
+    }
 
 
 if __name__ == "__main__":
