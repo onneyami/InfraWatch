@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+*.egg-info/
+*.db
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+
+# Go
+agent/agent
+agent/**/agent
+agent/**/infra-watch-agent
+*.exe
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+
+# Build artifacts
+*.out
