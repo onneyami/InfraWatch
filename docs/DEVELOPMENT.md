@@ -122,6 +122,25 @@ Do this after any change to `main.go`. The compiled binary is git-ignored, and
 `ahova start` uses whatever was last built, so forgetting to rebuild after an agent
 change is an easy trap. Watch the build output for compile errors.
 
+### Database location
+
+The SQLite files live in `backend/` (`backend/agents.db`, `backend/users.db`). Until
+recently a path bug put them in `backend/src/`. On the first start after that fix the
+backend moves an existing `backend/src/*.db` to `backend/` automatically and logs a
+warning. If both locations contain a file it uses `backend/`, never overwrites anything,
+and warns, so remove the stale `backend/src/` copy once you have checked it.
+
+### CI
+
+`.github/workflows/ci.yml` runs this same bar on every push to `main`/`master` and on every
+pull request: `tsc --noEmit` and a production `vite build` (frontend), `py_compile` plus an
+import smoke test of `src.main:app` (backend), and `go build ./...` (agent). It is the
+automated floor, not a test suite: it still catches nothing about behaviour.
+
+A production `vite build` fails unless `VITE_DASHBOARD_TOKEN` is set to a real secret
+(not the development placeholder). Set it in your build environment, with the same value
+as the backend's `DASHBOARD_API_TOKEN`.
+
 ## Environment variables
 
 | Variable | Used by | Purpose |

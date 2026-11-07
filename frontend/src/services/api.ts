@@ -13,7 +13,11 @@ import {
 } from '../types/metrics'
 
 // Используем относительный путь — Vite dev server проксирует /api на бэкенд
-const DASHBOARD_TOKEN = import.meta.env.VITE_DASHBOARD_TOKEN || 'dev-dashboard-token-change-me'
+// The placeholder is a development convenience only. `import.meta.env.DEV` is a build-time
+// constant, so it is stripped from production bundles (and vite.config.ts refuses to build
+// production without a real VITE_DASHBOARD_TOKEN).
+const DASHBOARD_TOKEN: string =
+  import.meta.env.VITE_DASHBOARD_TOKEN || (import.meta.env.DEV ? 'dev-dashboard-token-change-me' : '')
 
 export const httpClient = axios.create({
   baseURL: '/api/v1',

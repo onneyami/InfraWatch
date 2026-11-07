@@ -2,17 +2,48 @@
 Configuration for Ahova backend.
 """
 
+import logging
 import os
+import shutil
 from pathlib import Path
 
-# Base directory: backend/src/core -> backend/src
-SRC_DIR = Path(__file__).resolve().parent
-# backend/
-BACKEND_DIR = SRC_DIR.parent
+# core/config.py -> core -> src -> backend
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+# Where the databases lived before this was fixed: this file's grandparent was
+# mistaken for `backend/`, so the SQLite files ended up in `backend/src/`.
+_LEGACY_DB_DIR = BACKEND_DIR / "src"
 
-# Agents DB path: always backend/agents.db regardless of CWD
-AGENTS_DB_PATH = os.getenv("AGENTS_DB_PATH", str(BACKEND_DIR / "agents.db"))
-USERS_DB_PATH = os.getenv("USERS_DB_PATH", str(BACKEND_DIR / "users.db"))
+
+def _resolve_db_path(env_var: str, filename: str) -> str:
+    """Return the DB path: env override, else ``backend/<filename>``.
+
+    One-time migration: if the DB only exists at the legacy location
+    (``backend/src/``), move it to the correct place so existing accounts and
+    agent registrations survive the path fix. Skipped when the path is overridden
+    through the environment, or when both files exist (never overwrite data).
+    """
+    override = os.getenv(env_var)
+    if override:
+        return override
+
+    target = BACKEND_DIR / filename
+    legacy = _LEGACY_DB_DIR / filename
+    if not target.exists() and legacy.exists():
+        shutil.move(str(legacy), str(target))
+        logging.getLogger(__name__).warning(
+            "Moved %s from %s to %s (database path fix)", filename, legacy, target
+        )
+    elif target.exists() and legacy.exists():
+        logging.getLogger(__name__).warning(
+            "Both %s and %s exist; using %s. Remove the stale legacy file once checked.",
+            legacy, target, target,
+        )
+    return str(target)
+
+
+# Always backend/<name>.db regardless of CWD (overridable via env).
+AGENTS_DB_PATH = _resolve_db_path("AGENTS_DB_PATH", "agents.db")
+USERS_DB_PATH = _resolve_db_path("USERS_DB_PATH", "users.db")
 
 # Dashboard API token: shared secret used by the browser dashboard (SPA) to read
 # data from the API. This is a STOPGAP until real per-user authentication exists.
@@ -29,7 +60,6 @@ USERS_DB_PATH = os.getenv("USERS_DB_PATH", str(BACKEND_DIR / "users.db"))
 DASHBOARD_API_TOKEN = os.getenv("DASHBOARD_API_TOKEN", "dev-dashboard-token-change-me")
 
 if DASHBOARD_API_TOKEN == "dev-dashboard-token-change-me":
-    import logging
     logging.getLogger(__name__).warning(
         "DASHBOARD_API_TOKEN is not set - using an insecure development default. "
         "Set DASHBOARD_API_TOKEN in the environment before deploying anywhere "
