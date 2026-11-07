@@ -122,6 +122,14 @@ Do this after any change to `main.go`. The compiled binary is git-ignored, and
 `ahova start` uses whatever was last built, so forgetting to rebuild after an agent
 change is an easy trap. Watch the build output for compile errors.
 
+### Database location
+
+The SQLite files live in `backend/` (`backend/agents.db`, `backend/users.db`). Until
+recently a path bug put them in `backend/src/`. On the first start after that fix the
+backend moves an existing `backend/src/*.db` to `backend/` automatically and logs a
+warning. If both locations contain a file it uses `backend/`, never overwrites anything,
+and warns, so remove the stale `backend/src/` copy once you have checked it.
+
 ## Environment variables
 
 | Variable | Used by | Purpose |
