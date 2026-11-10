@@ -13,10 +13,12 @@ node_modules/
 dist/
 dist-ssr/
 
-# Go
-agent/agent
-agent/**/agent
-agent/**/infra-watch-agent
+# Go: ignore only the compiled binaries. Anchor the paths: the unanchored pattern
+# `agent/**/agent` also matched the *directory* agent/cmd/agent and silently kept
+# the whole Go source tree out of git.
+/agent/agent
+/agent/cmd/agent/agent
+/agent/**/infra-watch-agent
 *.exe
 
 # Logs
