@@ -57,6 +57,9 @@ interface AppState {
 
   // User auth
   currentUser: { id: number; username: string; email: string } | null
+  // false until the first /auth/me answer arrives, so the UI neither flashes the sign-in
+  // screen at an already signed-in user nor shows the dashboard to an anonymous one
+  authReady: boolean
   authLoading: boolean
   authError: string | null
   register: (username: string, email: string, password: string) => Promise<boolean>
@@ -193,6 +196,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // User auth
   currentUser: null,
+  authReady: false,
   authLoading: false,
   authError: null,
   clearAuthError: () => set({ authError: null }),
@@ -200,8 +204,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   register: async (username, email, password) => {
     set({ authLoading: true, authError: null })
     try {
-      const { token, user } = await api.register(username, email, password)
-      localStorage.setItem('ahova_user_token', token)
+      const user = await api.register(username, email, password)
       set({ currentUser: user })
       get().addEvent(`Account created: ${user.username}`)
       return true
@@ -216,13 +219,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   login: async (usernameOrEmail, password) => {
     set({ authLoading: true, authError: null })
     try {
-      const { token, user } = await api.login(usernameOrEmail, password)
-      localStorage.setItem('ahova_user_token', token)
+      const user = await api.login(usernameOrEmail, password)
       set({ currentUser: user })
       get().addEvent(`Signed in: ${user.username}`)
       return true
     } catch (e: any) {
-      set({ authError: e?.response?.data?.detail || 'Invalid username/email or password' })
+      const status = e?.response?.status
+      set({
+        authError:
+          status === 429
+            ? 'Too many attempts. Please wait a few minutes and try again.'
+            : e?.response?.data?.detail || 'Invalid username/email or password',
+      })
       return false
     } finally {
       set({ authLoading: false })
@@ -236,20 +244,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) {
       console.error('Logout request failed:', e)
     }
-    localStorage.removeItem('ahova_user_token')
     set({ currentUser: null })
     if (username) get().addEvent(`Signed out: ${username}`)
   },
 
   restoreSession: async () => {
-    const token = localStorage.getItem('ahova_user_token')
-    if (!token) return
+    // Старые версии хранили токен сессии в localStorage (читаемо для любого XSS). Теперь
+    // сессия — HttpOnly-cookie, а этот ключ больше не используется: чистим остаток.
+    localStorage.removeItem('ahova_user_token')
     try {
       const user = await api.getCurrentUser()
       set({ currentUser: user })
     } catch (e) {
-      // Токен истёк или недействителен — тихо очищаем, без ошибки на экране
-      localStorage.removeItem('ahova_user_token')
+      // Не вошли или сессия истекла — это нормальное состояние, показываем экран входа
+      set({ currentUser: null })
+    } finally {
+      set({ authReady: true })
     }
   },
   loading: {

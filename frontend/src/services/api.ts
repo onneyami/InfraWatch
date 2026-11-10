@@ -12,32 +12,43 @@ import {
   ProcessInfo,
 } from '../types/metrics'
 
-// Используем относительный путь — Vite dev server проксирует /api на бэкенд
-// The placeholder is a development convenience only. `import.meta.env.DEV` is a build-time
-// constant, so it is stripped from production bundles (and vite.config.ts refuses to build
-// production without a real VITE_DASHBOARD_TOKEN).
-const DASHBOARD_TOKEN: string =
-  import.meta.env.VITE_DASHBOARD_TOKEN || (import.meta.env.DEV ? 'dev-dashboard-token-change-me' : '')
-
+// Используем относительный путь — Vite dev server проксирует /api на бэкенд, а в проде
+// фронт и API живут на одном origin за reverse proxy.
+//
+// Аутентификация — HttpOnly-cookie сессии, которую выставляет сервер при логине. JS её не
+// видит и не хранит. `X-Requested-With` — CSRF-защита: бэкенд требует этот заголовок на всех
+// изменяющих запросах с cookie (браузер не может отправить его с чужого сайта).
 export const httpClient = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
-    'X-Dashboard-Token': DASHBOARD_TOKEN,
+    'X-Requested-With': 'XMLHttpRequest',
   },
 })
 
-// Прикладываем токен пользовательской сессии, если пользователь вошёл в
-// аккаунт — отдельный уровень от X-Dashboard-Token (тот защищает API от
-// анонимного доступа в принципе, этот определяет, кто именно сейчас работает).
-httpClient.interceptors.request.use((config) => {
-  const userToken = localStorage.getItem('ahova_user_token')
-  if (userToken) {
-    config.headers['X-User-Token'] = userToken
-  }
-  return config
-})
+// Эндпоинты, 401 на которых — нормальный ответ ("неверный пароль", "не вошли"), а не
+// признак того, что сессия протухла посреди работы.
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/me', '/auth/status', '/auth/logout']
+
+let unauthorizedHandler: (() => void) | null = null
+
+/** Вызывается, когда сервер ответил 401 на обычный запрос (сессия истекла или отозвана). */
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  unauthorizedHandler = handler
+}
+
+httpClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const url: string = error?.config?.url ?? ''
+    if (error?.response?.status === 401 && !AUTH_ENDPOINTS.some((p) => url.startsWith(p))) {
+      unauthorizedHandler?.()
+    }
+    return Promise.reject(error)
+  },
+)
 
 /**
  * ВАЖНО: пути и формы ответов ниже сверены построчно с реальными эндпоинтами
@@ -261,16 +272,21 @@ export const api = {
     return []
   },
 
-  // User auth — реальные аккаунты (регистрация/вход/сессии) поверх
-  // существующего dashboard-токена. См. backend/src/user_auth.py.
+  // User auth — единственный способ войти в дашборд. Сессия живёт в HttpOnly-cookie;
+  // токен в теле ответа не приходит. См. backend/src/user_auth.py.
+  getAuthStatus: async () => {
+    const res = await httpClient.get('/auth/status')
+    return res.data as { setup_required: boolean; registration_open: boolean }
+  },
+
   register: async (username: string, email: string, password: string) => {
     const res = await httpClient.post('/auth/register', { username, email, password })
-    return res.data as { token: string; user: { id: number; username: string; email: string } }
+    return res.data.user as { id: number; username: string; email: string }
   },
 
   login: async (usernameOrEmail: string, password: string) => {
     const res = await httpClient.post('/auth/login', { username_or_email: usernameOrEmail, password })
-    return res.data as { token: string; user: { id: number; username: string; email: string } }
+    return res.data.user as { id: number; username: string; email: string }
   },
 
   logout: async () => {

@@ -88,28 +88,6 @@ export const SettingsPage: React.FC = () => {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // API token — показываем реальный dashboard-токен, которым уже
-  // авторизуется сам этот фронтенд (см. services/api.ts), а не выдуманный.
-  const dashboardToken = (import.meta as any).env?.VITE_DASHBOARD_TOKEN || 'dev-dashboard-token-change-me'
-  const [showToken, setShowToken] = useState(false)
-  const [tokenCopied, setTokenCopied] = useState(false)
-  const maskedToken = dashboardToken.slice(0, 4) + '••••••••••••••••••••' + dashboardToken.slice(-4)
-
-  const handleCopyToken = () => {
-    navigator.clipboard.writeText(dashboardToken)
-    setTokenCopied(true)
-    toast.success('Token copied to clipboard')
-    setTimeout(() => setTokenCopied(false), 2000)
-  }
-
-  const handleRegenerateKey = () => {
-    // Честно: сейчас это статичный DASHBOARD_API_TOKEN из переменной
-    // окружения бэкенда — регенерация "по кнопке" потребовала бы отдельного
-    // backend-эндпоинта и раздачи нового токена всем клиентам. Такого
-    // эндпоинта пока нет — не притворяемся, что кнопка что-то делает.
-    toast('Regenerating from the UI isn\'t supported yet — change DASHBOARD_API_TOKEN in the backend .env and restart.', { icon: 'ℹ️', duration: 5000 })
-  }
-
   return (
     <div className="animate-fadeIn" style={{ display: 'flex', gap: theme.spacing[6] }}>
       <div style={{ width: 200, flexShrink: 0 }}>
@@ -293,26 +271,18 @@ export const SettingsPage: React.FC = () => {
 
         {activeSection === 'api' && (
           <AhovaCard title="API Access">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[4] }}>
-              <div>
-                <div style={{ fontSize: 13, color: theme.colors.text.secondary, marginBottom: theme.spacing[2] }}>Dashboard Token</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing[2] }}>
-                  <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', fontFamily: 'monospace', flex: 1 }}>
-                    {showToken ? dashboardToken : maskedToken}
-                  </div>
-                  <button onClick={() => setShowToken(s => !s)} style={{ height: 40, padding: `0 ${theme.spacing[3]}`, background: 'transparent', border: `1px solid ${theme.colors.border.default}`, borderRadius: theme.radius.sm, color: theme.colors.text.secondary, cursor: 'pointer', fontSize: 12 }}>
-                    {showToken ? 'Hide' : 'Show'}
-                  </button>
-                  <button onClick={handleCopyToken} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: `1px solid ${theme.colors.border.default}`, borderRadius: theme.radius.sm, color: theme.colors.text.secondary, cursor: 'pointer' }}>
-                    {tokenCopied ? <Check size={14} color={theme.colors.status.healthy} /> : <Copy size={14} />}
-                  </button>
-                </div>
-                <p style={{ fontSize: 12, color: theme.colors.text.muted, marginTop: theme.spacing[2] }}>
-                  Это тот же токен, которым сам дашборд авторизуется в API (VITE_DASHBOARD_TOKEN). Полноценные
-                  персональные API-ключи с независимой ротацией — задача для будущей многопользовательской модели.
-                </p>
-              </div>
-              <AhovaButton variant="secondary" size="sm" onClick={handleRegenerateKey}>Regenerate Key</AhovaButton>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[4], fontSize: 13, lineHeight: 1.6, color: theme.colors.text.secondary }}>
+              <p style={{ margin: 0 }}>
+                The dashboard talks to the API with your signed-in session. There is no shared token to copy: the
+                session lives in a secure cookie that page scripts cannot read, and it ends when you sign out.
+              </p>
+              <p style={{ margin: 0 }}>
+                Agents authenticate separately with their own token, issued when an agent registers. An agent token
+                can only send metrics; it cannot read dashboard data or control containers.
+              </p>
+              <p style={{ margin: 0, color: theme.colors.text.muted }}>
+                Personal API keys for scripts and integrations are not available yet.
+              </p>
             </div>
           </AhovaCard>
         )}

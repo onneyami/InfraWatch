@@ -14,9 +14,10 @@ import { AlertsPage } from './pages/alerts/AlertsPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { theme } from './theme/tokens'
 import { useAppStore } from './store/appStore'
-import { api } from './services/api'
+import { api, setUnauthorizedHandler } from './services/api'
 import { DEMO_ALERTS } from './services/mockData'
 import { WelcomeScreen } from './components/WelcomeScreen'
+import { AuthGate } from './components/auth/AuthGate'
 
 const PageRouter: React.FC = () => {
   const currentPage = useAppStore((s) => s.currentPage)
@@ -37,6 +38,8 @@ const PageRouter: React.FC = () => {
 
 const App: React.FC = () => {
   const { setAgents, setAlerts, setEvents, setDockerInfo, setLoading, restoreSession } = useAppStore()
+  const authReady = useAppStore((s) => s.authReady)
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null)
 
   // Пока активно дорабатываем дизайн Welcome Screen — показываем его при
   // каждой загрузке страницы (без persistence), чтобы не путать тестирование
@@ -49,8 +52,12 @@ const App: React.FC = () => {
   }
 
   useEffect(() => {
-    // Восстанавливаем сессию пользователя, если токен сохранён с прошлого раза
+    // Спрашиваем сервер, есть ли действующая сессия (HttpOnly-cookie с прошлого раза)
     restoreSession()
+
+    // Сессия истекла или отозвана посреди работы: любой 401 возвращает на экран входа
+    setUnauthorizedHandler(() => useAppStore.setState({ currentUser: null }))
+    return () => setUnauthorizedHandler(null)
   }, [])
 
   useEffect(() => {
@@ -60,6 +67,9 @@ const App: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    // Данные доступны только после входа: без сессии каждый запрос получил бы 401
+    if (currentUserId === null) return
+
     let cancelled = false
 
     const fetchData = async () => {
@@ -88,10 +98,19 @@ const App: React.FC = () => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [])
+  }, [currentUserId])
 
   if (showWelcome) {
     return <WelcomeScreen onGetStarted={handleGetStarted} />
+  }
+
+  // Пока сервер не ответил, вошёл ли пользователь, не показываем ни экран входа, ни дашборд
+  if (!authReady) {
+    return <div style={{ height: '100vh', background: theme.colors.bg.primary }} />
+  }
+
+  if (currentUserId === null) {
+    return <AuthGate />
   }
 
   return (
