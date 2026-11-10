@@ -7,11 +7,12 @@ from slowapi.errors import RateLimitExceeded
 import asyncio
 
 from .middleware import (
-    verify_agent_middleware,
+    auth_middleware,
     get_allowed_origins,
     limiter
 )
 from .stores import cleanup_old_metrics
+from .user_auth import user_auth_db
 
 # Import routers
 from .routers.metrics_router import router as metrics_router
@@ -35,7 +36,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add auth middleware
-app.middleware("http")(verify_agent_middleware)
+app.middleware("http")(auth_middleware)
 
 # Add CORS with whitelist
 allowed_origins = get_allowed_origins()
@@ -61,6 +62,7 @@ app.include_router(auth_router)
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks."""
+    user_auth_db.purge_expired_sessions()
     asyncio.create_task(cleanup_old_metrics_task())
     print("✅ Ahova API v2.6 started")
     print("📚 API Documentation: http://localhost:8000/docs")

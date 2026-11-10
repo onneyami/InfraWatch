@@ -45,25 +45,40 @@ def _resolve_db_path(env_var: str, filename: str) -> str:
 AGENTS_DB_PATH = _resolve_db_path("AGENTS_DB_PATH", "agents.db")
 USERS_DB_PATH = _resolve_db_path("USERS_DB_PATH", "users.db")
 
-# Dashboard API token: shared secret used by the browser dashboard (SPA) to read
-# data from the API. This is a STOPGAP until real per-user authentication exists.
+# ---------------------------------------------------------------------------
+# Authentication
 #
-# Why this exists: agent tokens authenticate one specific agent to the backend.
-# The browser dashboard is not an agent and has no agent identity, so it cannot
-# obtain an agent token through any real flow. Without this, every GET endpoint
-# protected in Ticket 1 is permanently unreachable from the UI.
-#
-# This token is embedded in the built frontend bundle and is therefore visible
-# to anyone who opens browser devtools. It only prevents casual/anonymous access
-# to the API, not a determined attacker. Replace with real user auth (JWT/session
-# tied to a logged-in user) before onboarding external users.
-DASHBOARD_API_TOKEN = os.getenv("DASHBOARD_API_TOKEN", "dev-dashboard-token-change-me")
+# The dashboard authenticates with a per-user session cookie (see user_auth.py and
+# routers/auth_router.py). Agents authenticate with their own X-Agent-ID/X-Agent-Token
+# pair and may only call the agent endpoints (see middleware.py).
+# ---------------------------------------------------------------------------
 
-if DASHBOARD_API_TOKEN == "dev-dashboard-token-change-me":
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev").lower()
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SESSION_COOKIE_NAME = "ahova_session"
+
+# Send the session cookie over HTTPS only. Defaults to on everywhere except
+# ENVIRONMENT=dev, because browsers refuse Secure cookies on plain http (except
+# localhost). Override explicitly with COOKIE_SECURE=true/false.
+COOKIE_SECURE = _env_bool("COOKIE_SECURE", ENVIRONMENT != "dev")
+
+# Self-service sign-up. The very first account can always be created (bootstrap);
+# after that registration is closed unless this is true. Keep it off until data is
+# scoped per owner: every signed-in user currently sees every agent and container.
+ALLOW_REGISTRATION = _env_bool("ALLOW_REGISTRATION", False)
+
+if os.getenv("DASHBOARD_API_TOKEN"):
     logging.getLogger(__name__).warning(
-        "DASHBOARD_API_TOKEN is not set - using an insecure development default. "
-        "Set DASHBOARD_API_TOKEN in the environment before deploying anywhere "
-        "reachable from outside localhost."
+        "DASHBOARD_API_TOKEN is set but no longer used: the shared dashboard token was "
+        "removed in favour of per-user sessions. Remove it from your environment."
     )
 
 
