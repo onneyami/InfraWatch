@@ -68,38 +68,45 @@ Supporting modules:
 - `docker_simple.py`: the Docker CLI parsing and formatting behind `docker_router.py`.
   For a Docker-data bug, start here rather than in the router.
 - `cis_scanner.py` / `trivy_scanner.py`: the two security scanners.
-- `middleware.py`: the token gate, described below.
-- `core/config.py`: every environment-driven setting, including the SQLite paths and
-  `DASHBOARD_API_TOKEN`.
+- `middleware.py`: the access policy (public / agent / user), CSRF check and rate limits,
+  described below.
+- `login_throttle.py`: in-memory failure throttle used by login and registration.
+- `core/config.py`: every environment-driven setting, including the SQLite paths and the
+  session-cookie and registration settings.
 
-### Authentication (three layers)
+### Authentication
 
-There are **three independent credential types** for three different purposes. None
-replaces another.
+Two credential types, for two kinds of caller. They are not interchangeable.
 
-1. **`X-Dashboard-Token`**: one static secret (`DASHBOARD_API_TOKEN`, with an insecure
-   development default). The SPA sends it on every request via an axios interceptor. It
-   only stops the API from being reachable by anyone who finds the port. It identifies
-   neither a person nor an agent.
-2. **`X-Agent-ID` + `X-Agent-Token`**: issued to one agent at registration; identifies
-   which host a metrics push came from.
-3. **`X-User-Token`**: issued at login/registration to one person. Today it is used only
-   for personalization (profile menu, "signed in as"). **It does not scope any data**: a
-   logged-in user sees exactly what an anonymous dashboard session sees. For
-   multi-tenancy this is the starting point, not a finished feature.
+1. **User session** (browser dashboard). Signing in (or creating the first account) makes
+   the backend set an **HttpOnly, SameSite=Lax cookie** (`ahova_session`, `Secure` outside
+   `ENVIRONMENT=dev`, path `/api`). The token is never in a response body, never in
+   `localStorage` and never in a URL, so page JavaScript cannot read it. Only a SHA-256
+   hash of it is stored in `users.db`. Sessions last 30 days, fixed.
+2. **Agent token** (`X-Agent-ID` + `X-Agent-Token`). Issued to one agent at registration.
+   It is accepted **only** on `POST /api/v1/metrics`; everywhere else it is rejected. A
+   compromised monitored host can push its own metrics and nothing more.
 
-`middleware.py` lets a request through if it carries a valid dashboard token (as a
-header, or as a `?dashboard_token=` query parameter for clients like `EventSource` that
-cannot set headers) or a valid agent token. A fixed list of paths skips the check
-entirely. Some are public because the caller cannot have a token yet (agent registration,
-user register/login). Others are public as a development convenience: `/api/v1/system`,
-`/api/v1/docker/metrics`, `/api/v1/docker/images` and the CIS scan endpoints. **Those
-read endpoints are reachable with no credential at all**, which is fine on localhost and
-worth revisiting before any other deployment. The exact list is in
-[API_REFERENCE.md](API_REFERENCE.md#authentication-per-request).
+`middleware.py` applies a **default-deny** policy to everything under `/api/v1/`. A request
+is public only if it is on a short explicit allowlist: `GET /api/v1/health`, the five
+`/api/v1/auth/*` endpoints (which enforce their own rules), and `POST /api/v1/agents/register`
+(an agent has no token before it registers). Every other route needs a valid session. The
+full table is in [API_REFERENCE.md](API_REFERENCE.md#authentication-per-request), and
+`backend/tests/test_api_auth.py` fails if a route becomes public or agent-accessible
+without the test's expected list being updated on purpose.
 
-`X-User-Token` is checked separately, inside `auth_router.py`, and is not part of the
-main gate.
+**CSRF.** An unsafe request (POST/PUT/PATCH/DELETE) that carries the session cookie must
+also send `X-Requested-With: XMLHttpRequest`, which `services/api.ts` always does. A page
+on another site cannot add that header without passing CORS, and the cookie is
+`SameSite=Lax`, so it cannot make an authenticated state-changing request.
+
+**Registration.** The first account can always be created (first-run setup). After that
+sign-up is closed unless `ALLOW_REGISTRATION=true`. `GET /api/v1/auth/status` tells the UI
+which screen to show. The UI shows a full-screen sign-in whenever there is no session.
+
+**What accounts still do not do:** scope data. Every signed-in user sees every agent and
+container and can run every action. That is the next piece of work; until it lands, keep
+registration closed.
 
 ### Storage
 
@@ -125,8 +132,8 @@ and no React Query: `store/appStore.ts` is the only state container and
   theme, notification settings, and the cross-page "deep link" fields (for example
   `selectedContainerId`, which makes a click on a container in the Overview topology
   open the Docker page with that container's drawer already open).
-- **`services/api.ts`**: one axios `httpClient` with the dashboard-token and user-token
-  interceptors, and one function per backend call. If a page fetches data some other
+- **`services/api.ts`**: one axios `httpClient` (cookie credentials, CSRF header, and a
+  401 hook that returns the user to the sign-in screen), and one function per backend call. If a page fetches data some other
   way, treat that as a smell: this file is the single place to fix when the contract with
   the backend drifts.
 - **`pages/`**: one file per sidebar destination.
