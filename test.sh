@@ -12,7 +12,11 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-API_BASE="http://localhost:8000"
+API_BASE="${API_BASE:-http://localhost:8000}"
+# Агент, которого создаёт этот тест. Токен выдаётся один раз, поэтому на повторном запуске
+# с тем же ID регистрация вернёт already_registered (см. ниже). Свежий агент на каждый запуск:
+#   TEST_AGENT_ID="test-agent-$(date +%s)" ./test.sh
+TEST_AGENT_ID="${TEST_AGENT_ID:-test-agent-001}"
 
 echo -e "${BLUE}══════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}🧪 Ahova Test Suite${NC}"
@@ -120,6 +124,8 @@ if [ -n "${AHOVA_USERNAME:-}" ] && [ -n "${AHOVA_PASSWORD:-}" ]; then
         expect_status "Metrics latest (signed in)" "$API_BASE/api/v1/metrics/latest" 200 -b "$COOKIE_JAR"
     else
         echo -e "${RED}✗ FAIL${NC} ($code)"
+        echo -e "  ${RED}Credentials were provided but sign-in failed; aborting.${NC}"
+        exit 1
     fi
 else
     echo -e "${YELLOW}Skipping signed-in checks (set AHOVA_USERNAME and AHOVA_PASSWORD to run them)${NC}"
@@ -135,26 +141,25 @@ echo ""
 echo -n "Registering test agent... "
 register_response=$(curl -s -X POST "$API_BASE/api/v1/agents/register" \
     -H "Content-Type: application/json" \
-    -d '{"agent_id": "test-agent-001", "hostname": "test-host", "version": "2.6.0"}')
+    -d "{\"agent_id\": \"$TEST_AGENT_ID\", \"hostname\": \"test-host\", \"version\": \"2.6.0\"}")
 
 # Извлекаем токен из ответа
 token=$(echo "$register_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 
 if [ -n "$token" ]; then
     echo -e "${GREEN}✓ PASS${NC}"
-    echo -e "  ${YELLOW}Agent ID: ${NC}test-agent-001"
+    echo -e "  ${YELLOW}Agent ID: ${NC}$TEST_AGENT_ID"
     echo -e "  ${YELLOW}Token:    ${NC}${token:0:20}..."
 else
     # Проверяем, не зарегистрирован ли уже агент
     status=$(echo "$register_response" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
     if [ "$status" = "already_registered" ]; then
-        echo -e "${YELLOW}⚠ ALREADY REGISTERED${NC}"
-        echo -e "  ${YELLOW}Using existing token from /tmp/ahova_agent_token${NC}"
-        # Пытаемся загрузить токен
-        if [ -f "/tmp/ahova_agent_token" ]; then
-            token=$(grep "^token=" /tmp/ahova_agent_token | cut -d= -f2 | tr -d '[:space:]')
-            echo -e "  ${YELLOW}Token loaded: ${NC}${token:0:20}..."
-        fi
+        # Токен показывается только при регистрации, поэтому для уже существующего агента его
+        # взять неоткуда. /tmp/ahova_agent_token принадлежит РЕАЛЬНОМУ агенту (другой agent_id),
+        # его токен с этим ID вернул бы 401, так что не подставляем его.
+        echo -e "${YELLOW}⚠ ALREADY REGISTERED${NC} (token is only shown once)"
+        echo -e "  ${YELLOW}Skipping the authenticated push. For a fresh agent run:${NC}"
+        echo -e "  ${YELLOW}TEST_AGENT_ID=\"test-agent-\$(date +%s)\" ./test.sh${NC}"
     else
         echo -e "${RED}✗ FAIL${NC}"
         echo -e "  Response: $register_response"
@@ -165,7 +170,7 @@ fi
 if [ -n "$token" ]; then
     test_auth_endpoint "Send metrics (with token)" \
         "$API_BASE/api/v1/metrics" \
-        "test-agent-001" \
+        "$TEST_AGENT_ID" \
         "$token"
 fi
 
