@@ -11,30 +11,27 @@ If this file ever disagrees with the code, trust the code and fix this file.
 
 ## Authentication per request
 
-Most endpoints require `X-Dashboard-Token`, which `httpClient` attaches automatically
-(see [ARCHITECTURE.md](ARCHITECTURE.md#authentication-three-layers)). The same token is
-also accepted as a `?dashboard_token=` query parameter on **any** endpoint, for clients
-that cannot set custom headers, such as the browser's `EventSource` used for the log
-stream.
+Everything under `/api/v1/` is **denied by default**. The browser authenticates with the
+`ahova_session` cookie set at login (see
+[ARCHITECTURE.md](ARCHITECTURE.md#authentication)); `httpClient` sends it automatically.
+Unsafe requests (POST/PUT/PATCH/DELETE) with the cookie must also send
+`X-Requested-With: XMLHttpRequest`, otherwise the response is `403 Missing CSRF header`.
+`EventSource` (the log stream) sends the cookie by itself; there is no token in any URL.
 
-These paths skip the token check entirely and need no credential:
+| Access | Routes |
+|---|---|
+| **Public** (no credential) | `GET /`, `GET /docs`, `GET /redoc`, `GET /openapi.json`, `GET /api/v1/health`, `POST /api/v1/agents/register`, and the `/api/v1/auth/*` endpoints below (they enforce their own rules) |
+| **Agent token** (`X-Agent-ID` + `X-Agent-Token`) | `POST /api/v1/metrics` only |
+| **Signed-in user** (session cookie) | every other `/api/v1/` route, including `/system`, `/docker/metrics`, `/docker/images` and the CIS scan endpoints, which used to be public |
 
-- `GET /` and `GET /api/v1/health`
-- `GET /api/v1/system`
-- `GET /api/v1/docker/images` and `GET /api/v1/docker/metrics`
-- `GET /api/v1/docker/cis/scan` and `GET /api/v1/docker/cis/categories`
-- `POST /api/v1/agents/register`
-- `POST /api/v1/auth/register` and `POST /api/v1/auth/login`
-
-Everything else needs a valid dashboard token (or an agent token, for the metrics push).
-Note that several of the public paths expose real host and Docker data; see
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md#several-read-endpoints-are-fully-public).
+An agent token is rejected on every route except the metrics push. Rate limits: 300
+requests/minute per user and endpoint, 60 per agent and endpoint (`429` beyond that).
 
 ## Metrics and agents (`metrics_router.py`, prefix `/api/v1`)
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/agents/register` | Public. Returns a per-agent token. |
+| `POST` | `/agents/register` | Public. Returns a per-agent token. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md#agent-registration-is-open-and-can-overwrite-an-existing-agent). |
 | `POST` | `/metrics` | The agent pushes its snapshot here. Requires the agent token. |
 | `GET` | `/metrics/latest` | Returns `{ [agentId]: AgentMetrics }`, a bare object keyed by agent ID, **not** wrapped in `{ agents: {...} }`. |
 | `GET` | `/metrics/history` | Query: `agent_id`, `metric_type` (a dotted path into the raw payload, e.g. `cpu.usage`), `limit`, `timeframe` (seconds; pass it explicitly). |
@@ -50,11 +47,11 @@ reachable that way unless the agent first aggregates them to a top-level field; 
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/docker/metrics` | Full snapshot: containers, images, networks, volumes, engine info. Public. The main data source for the Docker pages. |
+| `GET` | `/docker/metrics` | Full snapshot: containers, images, networks, volumes, engine info. The main data source for the Docker pages. |
 | `GET` | `/docker/simple` | Lighter alternative to `/docker/metrics`. |
-| `GET` | `/docker/images` | Image list only. Public. |
+| `GET` | `/docker/images` | Image list only. |
 | `GET` | `/docker/container/{container_id}/logs` | Logs as **one newline-joined string**, not an array. Split client-side. |
-| `GET` | `/docker/container/{container_id}/logs/stream` | Server-Sent Events live tail. Send the token as `?dashboard_token=`. |
+| `GET` | `/docker/container/{container_id}/logs/stream` | Server-Sent Events live tail. Authenticated by the session cookie; open it with `new EventSource(url, { withCredentials: true })`. |
 | `POST` | `/docker/container/{container_id}/start` | |
 | `POST` | `/docker/container/{container_id}/stop` | Can take up to Docker's graceful-shutdown window (about 10 s) to respond. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md#container-actions-can-time-out-on-the-client-while-still-succeeding). |
 | `POST` | `/docker/container/{container_id}/restart` | Same timeout caveat as `/stop`. |
@@ -81,8 +78,8 @@ of containers.
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` | `/docker/cis/scan` | Runs the full CIS Docker Benchmark. Public. **Expensive**: dozens of inspection calls. Never call it on a timer or on page load; it must be an explicit user action, with an extended client timeout (60 s). |
-| `GET` | `/docker/cis/categories` | Public. CIS check categories. |
+| `GET` | `/docker/cis/scan` | Runs the full CIS Docker Benchmark. **Expensive**: dozens of inspection calls. Never call it on a timer or on page load; it must be an explicit user action, with an extended client timeout (60 s). |
+| `GET` | `/docker/cis/categories` | CIS check categories. |
 | `GET` | `/docker/image/{image_id}/vulnerabilities` | Trivy scan of one image, ID in the path. |
 | `POST` | `/docker/image/scan` | Trivy scan; the image is identified in the **request body**. Check the Pydantic model in the router before wiring a client. |
 | `POST` | `/docker/image/secrets-scan` | Secrets scan, same body-based pattern. |
@@ -99,7 +96,7 @@ actual envelope when you add a typed client.
 |---|---|---|
 | `GET` | `/` | Public. Root. |
 | `GET` | `/api/v1/health` | Public. Liveness only; it does not check the agent, Docker or the databases. |
-| `GET` | `/api/v1/system` | Public. CPU/memory/disk/battery of the **backend host**, not of a monitored agent. Easy to confuse with agent-reported metrics if the two ever run on different machines. |
+| `GET` | `/api/v1/system` | CPU/memory/disk/battery of the **backend host**, not of a monitored agent. Easy to confuse with agent-reported metrics if the two ever run on different machines. |
 
 This router's decorators carry the full `/api/v1/...` path instead of using a shared
 prefix, which is worth knowing when you search for where a route is defined.
@@ -108,10 +105,11 @@ prefix, which is worth knowing when you search for where a route is defined.
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/auth/register` | Public. Body: username, email, password. The password is hashed with PBKDF2-HMAC-SHA256 (260k iterations) before storage. Returns a session token. |
-| `POST` | `/auth/login` | Public. Returns a session token. |
-| `POST` | `/auth/logout` | Invalidates the session token sent in `X-User-Token`. |
-| `GET` | `/auth/me` | Current user from `X-User-Token`; 401 if missing or expired. |
+| `GET` | `/auth/status` | Public. `{ "setup_required": bool, "registration_open": bool }`. `setup_required` is true while no account exists. |
+| `POST` | `/auth/register` | Public. Body: username, email, password (8-128 characters). The first account is always allowed; later ones need `ALLOW_REGISTRATION=true`, otherwise `403`. Sets the session cookie; the body is `{ "user": ... }` with no token. Limited to 10 attempts/hour per IP. |
+| `POST` | `/auth/login` | Public. Body: `username_or_email`, `password`. Sets a fresh session cookie and ends any session the request already carried. `401` on bad credentials; `429` with `Retry-After` after repeated failures. |
+| `POST` | `/auth/logout` | Ends the session in the cookie and clears it. Idempotent. Needs the CSRF header when a cookie is present. |
+| `GET` | `/auth/me` | Current user from the cookie; `401` if missing or expired. |
 
-Session tokens are opaque random strings stored server-side in `users.db`. There is no
-JWT. Read `user_auth.py` for the current lifetime behavior before relying on it.
+Session tokens are opaque random strings; only their SHA-256 hash is stored in
+`users.db`. There is no JWT. Lifetime is a fixed 30 days from sign-in.

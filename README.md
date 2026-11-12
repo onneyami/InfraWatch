@@ -25,9 +25,10 @@ big picture and points you to the rest of `docs/` for depth. Read this first, th
   [Known Issues](docs/KNOWN_ISSUES.md)).
 - **Process management** — list, inspect, stop (SIGTERM) or kill (SIGKILL) processes on
   the host the backend runs on.
-- **Accounts** — real user registration/login (PBKDF2-hashed passwords, server-side
-  session tokens), layered on top of the dashboard-wide access token (see
-  [Architecture → Authentication](docs/ARCHITECTURE.md#authentication-three-layers)).
+- **Accounts** — the dashboard requires sign-in (PBKDF2-hashed passwords, HttpOnly session
+  cookie; the first account is created on first run, and sign-up is then closed). Agents
+  use their own tokens and can only push metrics (see
+  [Architecture → Authentication](docs/ARCHITECTURE.md#authentication)).
 - **Alerts & Activity** — a live feed of actions taken through the UI (container
   restarted, process killed, scan started, etc.) plus optional desktop notifications and
   a sound. There is **no automated, threshold-based alerting engine yet** — this is the
@@ -105,16 +106,15 @@ behind each.
    will not catch regressions. Start with pytest integration tests for the auth and
    Docker/metrics routers and a handful of end-to-end tests (Overview loads, Docker
    table renders, login works).
-2. **CI.** Wire `tsc --noEmit`, `py_compile` (later pytest) and `go build` into GitHub
-   Actions before anything more ambitious.
+2. **Per-user ownership.** Scope agents and actions to the user who enrolled them, then
+   consider opening registration. See [Known issues](docs/KNOWN_ISSUES.md).
 3. **A real alerting engine.** Thresholds, persistence, and a backend that generates
    alerts from actual metric conditions, rather than the frontend only logging its own
    user-triggered actions.
 4. **Persist metrics history.** It currently lives in backend memory and is lost on
    restart. A SQLite table with a retention window would close this gap.
-5. **Decide on the public read endpoints.** Several read-only endpoints are reachable
-   with no credential at all (listed in [API_REFERENCE.md](docs/API_REFERENCE.md)). Fine
-   for localhost development, worth closing before any other kind of deployment.
+5. **Agent enrollment keys.** Agent registration is public and can overwrite an existing
+   agent's metadata; replace it with a one-time key issued from the UI.
 
 ## License
 

@@ -17,8 +17,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
 }
 
-const DASHBOARD_TOKEN = (import.meta as any).env?.VITE_DASHBOARD_TOKEN || 'dev-dashboard-token-change-me'
-
 export const DockerPage: React.FC = () => {
   const { dockerInfo, addEvent, addAlert, selectedContainerId, setSelectedContainerId } = useAppStore()
   const [containers, setContainers] = useState<DockerContainer[]>([])
@@ -136,8 +134,9 @@ export const DockerPage: React.FC = () => {
       return
     }
     setStreaming(true)
-    const url = `/api/v1/docker/container/${selectedContainer.id}/logs/stream?lines=50&dashboard_token=${encodeURIComponent(DASHBOARD_TOKEN)}`
-    const es = new EventSource(url)
+    // Авторизация — cookie сессии: EventSource шлёт её сам, токен в URL (и в логах) не нужен
+    const url = `/api/v1/docker/container/${selectedContainer.id}/logs/stream?lines=50`
+    const es = new EventSource(url, { withCredentials: true })
     eventSourceRef.current = es
     es.onmessage = (event) => {
       setLogs((prev) => [...prev, event.data])

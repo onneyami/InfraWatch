@@ -21,17 +21,15 @@ Do not infer the shape from the endpoint name or copy it from a neighboring endp
 these differences exist because endpoints were built at different times with different
 conventions. Prefer typing the real envelope over `any`.
 
-## Several read endpoints are fully public
+## Agent registration is open and can overwrite an existing agent
 
-`middleware.py` has a hardcoded list of paths that skip authentication entirely. Besides
-health, agent registration and user register/login, it includes `/api/v1/system`,
-`/api/v1/docker/metrics`, `/api/v1/docker/images`, `/api/v1/docker/cis/scan` and
-`/api/v1/docker/cis/categories`. Anyone who can reach the backend port can read host
-stats, the container and image inventory, and run a CIS scan without any token. That is
-acceptable for local development and not for any shared or exposed deployment. The
-full list is in [API_REFERENCE.md](API_REFERENCE.md#authentication-per-request). Remove
-entries from that list (and have the frontend send its token, which it already does) as
-part of hardening.
+`POST /api/v1/agents/register` is public, because an agent has no token before it
+registers. It has no rate limit, so anyone who can reach the backend can create unlimited
+fake agents. For an `agent_id` that already exists it returns "already registered" without
+a token, **but still updates that agent's hostname, IP address and version** from the
+request. An unauthenticated caller can therefore falsify the metadata of a real agent.
+The planned fix is an enrollment key issued from the signed-in UI and exchanged once at
+registration.
 
 ## macOS disk reporting is not what it looks like
 
@@ -96,12 +94,33 @@ page refresh. There is no backend component that evaluates metrics against thres
 there are no automatically generated alerts: today's alerts and activity entries come from
 actions taken in the UI. See the README's suggested next steps.
 
-## User accounts do not scope data
+## Every signed-in user can see and do everything
 
-Registration, login and sessions are real, but `X-User-Token` is used only for the
-profile menu. Every user, and every anonymous dashboard session, sees the same agents,
-containers and metrics. Treat accounts as a foundation for multi-tenancy, not as a
-finished feature.
+Access control is now real (a valid session is required everywhere, and an agent token can
+only push metrics), but it is all-or-nothing. Every signed-in user sees the same agents,
+containers and metrics, and can run every container and process action. Sign-up is closed
+after the first account for exactly this reason; do not set `ALLOW_REGISTRATION=true` on
+anything reachable by people you would not give full control to. Per-user ownership of
+agents is the next step.
+
+Related, and also unchanged: Docker and process actions run on the **backend host**, not on
+the host an agent reports from. That is fine on one machine; for remote hosts they need a
+command channel through the agent.
+
+## Login throttling is in memory
+
+Failed logins are limited per IP (10 per 15 minutes) and per username (20 per 15 minutes),
+and sign-up to 10 attempts per hour per IP. The counters live in process memory: they reset
+on restart, and with several workers each keeps its own budget. Behind a reverse proxy all
+clients share the proxy's IP unless uvicorn runs with `--proxy-headers
+--forwarded-allow-ips=<proxy>`, which would make one person's failures lock everyone out.
+The per-username limit can also be used to lock a known username out for up to 15 minutes.
+
+## Sessions are a fixed 30 days
+
+A session cannot be extended, and there is no "sign out everywhere" or session list yet.
+Changing a password does not end other sessions. Expired sessions are deleted at startup and
+whenever a new session is created.
 
 ## The Docker collector used to have two independent implementations
 
