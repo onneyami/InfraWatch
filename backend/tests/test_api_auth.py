@@ -6,11 +6,11 @@ installed. The route-inventory test is the important guardrail: it enumerates ev
 the app actually registers, so a new endpoint cannot ship unauthenticated by accident.
 """
 
+import pathlib
 import re
 import unittest
 
 try:
-    from fastapi.routing import APIRoute
     from fastapi.testclient import TestClient
     from src.main import app
 except ImportError as exc:  # pragma: no cover - depends on the environment
@@ -38,12 +38,24 @@ EXPECTED_PUBLIC = {
 EXPECTED_AGENT = {("POST", "/api/v1/metrics")}
 
 
+HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
+
+
 def api_routes():
-    for route in app.routes:
-        if isinstance(route, APIRoute) and route.path.startswith("/api/v1/"):
-            path = re.sub(r"\{[^}]+\}", "x", route.path)
-            for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
-                yield method, path
+    """Every (METHOD, path) under /api/v1/, with path parameters replaced by "x".
+
+    Taken from the OpenAPI schema on purpose: it is public API and stable across FastAPI
+    versions, whereas ``app.routes`` holds private wrapper objects in recent releases (0.143
+    stopped flattening included routers), which silently yielded no routes. The price is
+    that routes hidden from the schema would be invisible here; a test below forbids those.
+    """
+    for template, operations in app.openapi()["paths"].items():
+        if not template.startswith("/api/v1/"):
+            continue
+        path = re.sub(r"\{[^}]+\}", "x", template)
+        for method in operations:
+            if method in HTTP_METHODS:
+                yield method.upper(), path
 
 
 def reset_state():
@@ -58,6 +70,14 @@ def reset_state():
 
 
 class RouteInventoryTests(unittest.TestCase):
+    def test_no_route_is_hidden_from_the_openapi_schema(self):
+        # The inventory below reads the OpenAPI schema, so a route with
+        # include_in_schema=False would dodge it. Forbid that.
+        src = pathlib.Path(__file__).resolve().parent.parent / "src"
+        offenders = [str(p.relative_to(src)) for p in src.rglob("*.py")
+                     if "include_in_schema" in p.read_text(encoding="utf-8")]
+        self.assertEqual(offenders, [], "routes hidden from OpenAPI escape the auth inventory")
+
     def test_public_and_agent_routes_are_exactly_the_expected_ones(self):
         routes = set(api_routes())
         self.assertGreater(len(routes), 25, "route discovery looks broken")
