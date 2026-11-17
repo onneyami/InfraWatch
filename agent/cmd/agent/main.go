@@ -35,6 +35,7 @@ type Config struct {
 	Interval      int      `json:"interval"` // в секундах
 	AgentID       string   `json:"agent_id"`
 	AgentToken    string   `json:"-"` // Не сериализуется в конфиг, хранится отдельно
+	EnrollKey     string   `json:"-"` // Одноразовый ключ регистрации (AHOVA_ENROLL_KEY), нужен только при первом запуске
 	CollectDisks  bool     `json:"collect_disks"`
 	CollectNet    bool     `json:"collect_net"`
 	CollectDocker bool     `json:"collect_docker"`
@@ -426,84 +427,82 @@ func saveToken(agentID string, token string) error {
 	return os.WriteFile(tokenPath, []byte(content), 0600)
 }
 
-func registerAgent(config *Config) {
+// registerAgent регистрирует агента на бэкенде по одноразовому ключу (config.EnrollKey) и
+// сохраняет полученный токен. Вызывается только если сохранённого токена для AgentID нет.
+func registerAgent(config *Config) error {
 	registration := map[string]interface{}{
-		"agent_id":   config.AgentID,
-		"hostname":   getHostname(),
-		"ip_address": getLocalIP(),
-		"version":    "2.5",
-		"tags":       config.Tags,
+		"agent_id":       config.AgentID,
+		"enrollment_key": config.EnrollKey,
+		"hostname":       getHostname(),
+		"ip_address":     getLocalIP(),
+		"version":        "2.5",
+		"tags":           config.Tags,
 	}
 
 	jsonData, err := json.Marshal(registration)
 	if err != nil {
-		log.Printf("Error marshaling registration: %v", err)
-		return
+		return fmt.Errorf("could not marshal registration: %w", err)
 	}
 
-	resp, err := http.Post(config.BackendURL+"/api/v1/agents/register", "application/json", bytes.NewBuffer(jsonData))
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	resp, err := httpClient.Post(config.BackendURL+"/api/v1/agents/register", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
-		log.Printf("Warning: Could not register agent: %v", err)
-		return
+		return fmt.Errorf("could not reach the backend: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Читаем тело ответа
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Warning: Could not read registration response: %v", err)
-		return
+		return fmt.Errorf("could not read registration response: %w", err)
 	}
 
-	if resp.StatusCode == 200 {
-		// Парсим ответ для извлечения токена
+	switch resp.StatusCode {
+	case http.StatusOK:
 		var result struct {
-			Status  string `json:"status"`
-			Token   string `json:"token"`
-			AgentID string `json:"agent_id"`
+			Token string `json:"token"`
 		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			log.Printf("Warning: Could not parse registration response: %v", err)
-			return
+		if err := json.Unmarshal(body, &result); err != nil || result.Token == "" {
+			return fmt.Errorf("registration response contained no token")
 		}
-
-		if result.Token != "" {
-			// Сохраняем токен
-			if err := saveToken(config.AgentID, result.Token); err != nil {
-				log.Printf("⚠️  Could not save token: %v", err)
-			} else {
-				log.Printf("✅ Agent registered: %s, token saved", config.AgentID)
-			}
-			config.AgentToken = result.Token
-		} else if result.Status == "already_registered" {
-			log.Printf("ℹ️  Agent already registered, using existing token")
-			// Пытаемся загрузить сохранённый токен
-			token, err := loadToken(config.AgentID)
-			if err != nil {
-				log.Printf("⚠️  No saved token found: %v", err)
-				log.Printf("⚠️  Agent will not be able to send metrics. Re-register manually.")
-			} else {
-				config.AgentToken = token
-				log.Printf("✅ Token loaded from file")
-			}
+		if err := saveToken(config.AgentID, result.Token); err != nil {
+			// Не фатально: агент работает, но после перезапуска понадобится новый ключ
+			log.Printf("⚠️  Could not save token (a new enrollment key will be needed after a restart): %v", err)
 		} else {
-			log.Printf("✅ Agent registered successfully: %s", config.AgentID)
+			log.Printf("✅ Agent registered: %s, token saved", config.AgentID)
 		}
-	} else {
-		log.Printf("⚠️  Agent registration failed: %s (body: %s)", resp.Status, string(body))
+		config.AgentToken = result.Token
+		return nil
+	case http.StatusUnauthorized:
+		return fmt.Errorf("the enrollment key was rejected (invalid, expired or already used); create a new one in the dashboard")
+	case http.StatusConflict:
+		return fmt.Errorf("agent_id %q is already registered; remove it in the dashboard, or start the agent with a different AGENT_ID", config.AgentID)
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("too many failed attempts from this address; try again later")
+	default:
+		return fmt.Errorf("registration failed: %s (body: %s)", resp.Status, string(body))
 	}
 }
 
-func sendHeartbeat(config *Config) {
-	// Периодически отправляем heartbeat для обновления last_seen
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// Можно отправить простой запрос на обновление статуса
-		// или использовать тот же эндпоинт регистрации
-		registerAgent(config)
+// ensureRegistered гарантирует, что у агента есть токен: берёт сохранённый, иначе
+// регистрируется по AHOVA_ENROLL_KEY. Без того и другого метрики отправить нельзя, поэтому
+// агент останавливается с подсказкой, а не молча получает 401 бесконечно.
+func ensureRegistered(config *Config) {
+	if token, err := loadToken(config.AgentID); err == nil && token != "" {
+		config.AgentToken = token
+		log.Printf("✅ Using saved token for agent %s", config.AgentID)
+		return
 	}
+
+	if config.EnrollKey == "" {
+		log.Fatalf("❌ No saved token for agent %q and AHOVA_ENROLL_KEY is not set.\n"+
+			"   Create an enrollment key in the dashboard (Settings → Agents → Add Agent) "+
+			"and start the agent with AHOVA_ENROLL_KEY=<key>.", config.AgentID)
+	}
+
+	if err := registerAgent(config); err != nil {
+		log.Fatalf("❌ Agent registration failed: %v", err)
+	}
+	config.EnrollKey = "" // одноразовый ключ больше не нужен
 }
 
 func main() {
@@ -526,10 +525,16 @@ func main() {
 		agentID = envID
 	}
 
+	// Ключ регистрации читаем один раз и убираем из окружения, чтобы его не унаследовали
+	// дочерние процессы (docker, ps и т.п.), которые запускает агент.
+	enrollKey := os.Getenv("AHOVA_ENROLL_KEY")
+	os.Unsetenv("AHOVA_ENROLL_KEY")
+
 	config := Config{
 		BackendURL:    backendURL,
 		Interval:      5, // 5 секунд для базовых метрик
 		AgentID:       agentID,
+		EnrollKey:     enrollKey,
 		CollectDisks:  true,
 		CollectNet:    true,
 		CollectDocker: true,
@@ -537,11 +542,10 @@ func main() {
 		Tags:          []string{"production"},
 	}
 
-	// Регистрация агента
-	registerAgent(&config)
-
-	// Запускаем heartbeat в фоне
-	go sendHeartbeat(&config)
+	// Токен: сохранённый с прошлого запуска или новый по ключу регистрации.
+	// (Раньше агент перерегистрировался каждые 30 секунд как "heartbeat"; это больше не нужно:
+	// last_seen обновляется при каждой отправке метрик.)
+	ensureRegistered(&config)
 
 	// Выводим конфигурацию
 	fmt.Printf("Agent ID: %s\n", config.AgentID)
@@ -1496,7 +1500,7 @@ func sendMetrics(config Config, advanced bool) {
 
 	// Проверяем ответ (401 означает проблему с токеном)
 	if resp.StatusCode == 401 {
-		log.Printf("❌ Authentication failed. Check token. Status: %d", resp.StatusCode)
+		log.Printf("❌ Authentication failed (401): the backend rejected this agent's token. If the agent was removed in the dashboard, delete /tmp/ahova_agent_token and restart with a new AHOVA_ENROLL_KEY.")
 	} else if advanced {
 		log.Printf("📊 Advanced metrics sent. Status: %d", resp.StatusCode)
 	} else {
