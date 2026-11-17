@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Settings, Bell, Palette, Key, Server, Plus, Copy, Check, MapPin, Volume2, Monitor } from 'lucide-react'
+import { Settings, Bell, Palette, Key, Server, Plus, MapPin, Volume2, Monitor } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { theme } from '../../theme/tokens'
 import { AhovaCard } from '../../components/ui/AhovaCard'
 import { AhovaBadge } from '../../components/ui/AhovaBadge'
 import { AhovaButton } from '../../components/ui/AhovaButton'
-import { AhovaDrawer } from '../../components/ui/AhovaDrawer'
+import { AddAgentDrawer } from '../../components/agents/AddAgentDrawer'
 import { useAppStore } from '../../store/appStore'
 
 const sections = [
@@ -76,17 +76,7 @@ export const SettingsPage: React.FC = () => {
     toast.success(`Timezone set to ${detected}`)
   }
 
-  // Add Agent drawer (тот же паттерн, что и на странице Hosts)
   const [showAddAgent, setShowAddAgent] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const backendUrl = window.location.protocol + '//' + window.location.hostname + ':8000'
-  const installCommand = `BACKEND_URL=${backendUrl} AGENT_ID=my-server ./agent`
-  const handleCopyCommand = () => {
-    navigator.clipboard.writeText(installCommand)
-    setCopied(true)
-    toast.success('Command copied to clipboard')
-    setTimeout(() => setCopied(false), 2000)
-  }
 
   return (
     <div className="animate-fadeIn" style={{ display: 'flex', gap: theme.spacing[6] }}>
@@ -288,20 +278,7 @@ export const SettingsPage: React.FC = () => {
         )}
       </div>
 
-      <AhovaDrawer open={showAddAgent} onClose={() => setShowAddAgent(false)} title="Add Agent">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[4] }}>
-          <p style={{ fontSize: 13, color: theme.colors.text.secondary, lineHeight: 1.6 }}>
-            Скопируйте команду на сервере, который хотите мониторить, и запустите
-            скомпилированный бинарник агента (<code>make build-agent</code> в корне проекта).
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing[2], padding: theme.spacing[3], background: theme.colors.bg.secondary, border: `1px solid ${theme.colors.border.default}`, borderRadius: theme.radius.sm, fontFamily: 'monospace', fontSize: 12 }}>
-            <code style={{ flex: 1, wordBreak: 'break-all' }}>{installCommand}</code>
-            <button onClick={handleCopyCommand} style={{ flexShrink: 0, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: theme.radius.sm, background: 'transparent', color: theme.colors.text.secondary, cursor: 'pointer' }}>
-              {copied ? <Check size={14} color={theme.colors.status.healthy} /> : <Copy size={14} />}
-            </button>
-          </div>
-        </div>
-      </AhovaDrawer>
+      <AddAgentDrawer open={showAddAgent} onClose={() => setShowAddAgent(false)} />
     </div>
   )
 }
