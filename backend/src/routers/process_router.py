@@ -8,7 +8,8 @@ Endpoints:
 - POST /api/v1/process/{pid}/stop - остановить процесс
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 from typing import Dict, Any, Optional
 from datetime import timedelta
 import asyncio
@@ -17,6 +18,8 @@ import signal
 import os
 import time
 
+from ..auth import auth_db
+from ..middleware import require_user_id
 from ..stores import process_history
 
 router = APIRouter(prefix="/api/v1", tags=["Processes"])
@@ -187,25 +190,34 @@ async def stop_process(pid: int, force: bool = False):
 
 
 @router.get("/process/{pid}/history")
-async def get_process_history(pid: int, limit: int = 50):
-    """Получить историю потребления ресурсов процессом"""
+async def get_process_history(request: Request, pid: int, limit: int = 50):
+    """Получить историю потребления ресурсов процессом.
+
+    История приходит от агентов, поэтому показываются только записи агентов текущего
+    пользователя (PID одинаковы на разных хостах, а чужие данные видеть нельзя).
+    """
     try:
-        if pid not in process_history or not process_history[pid]:
+        owned = await run_in_threadpool(auth_db.agent_ids_for_owner, require_user_id(request))
+        entries = [e for e in process_history.get(pid, []) if e.get("agent_id") in owned]
+
+        if not entries:
             return {
                 "pid": pid,
                 "history": [],
                 "count": 0,
                 "message": "No history available for this process"
             }
-        
-        history = process_history[pid][-limit:]
-        
+
+        history = entries[-limit:]
+
         return {
             "pid": pid,
             "process_name": history[-1].get("name", "unknown") if history else "unknown",
             "history": history,
             "count": len(history)
         }
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting process history: {str(e)}")

@@ -2,30 +2,64 @@
 Router для метрик и агентов.
 
 Endpoints:
-- POST /api/v1/metrics - приём метрик от агента
-- GET /api/v1/metrics/latest - последние метрики
-- GET /api/v1/metrics/history - история метрик
-- GET /api/v1/metrics/summary - сводная статистика
-- GET /api/v1/agents - список агентов
-- POST /api/v1/agents/register - регистрация агента
+- POST /api/v1/metrics - приём метрик от агента (только токен агента)
+- GET /api/v1/metrics/latest - последние метрики (только агенты текущего пользователя)
+- GET /api/v1/metrics/history - история метрик (то же)
+- GET /api/v1/metrics/summary - сводная статистика (то же)
+- GET /api/v1/agents - список агентов пользователя
+- POST /api/v1/agents/enrollment-keys - одноразовый ключ регистрации агента
+- POST /api/v1/agents/register - регистрация агента по ключу (публичный, ключ = авторизация)
+- DELETE /api/v1/agents/{agent_id} - удалить своего агента (отзывает его токен)
+
+Агент принадлежит пользователю, создавшему ключ регистрации. Все чтения отфильтрованы по
+владельцу; чужой agent_id неотличим от несуществующего (404).
 """
 
-from fastapi import APIRouter, HTTPException, Request
-from typing import Dict, List, Optional, Any
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
+from typing import Dict, List, Optional, Any, Set
 from datetime import datetime
 import time
 import json
 import statistics
 
 from ..stores import metrics_history, agents_registry, agent_last_seen, process_history, MAX_HISTORY
-from ..auth import create_agent_token, get_agent_info
+from ..auth import (
+    ENROLLMENT_KEY_TTL_SECONDS,
+    AgentExistsError,
+    InvalidEnrollmentKeyError,
+    TooManyKeysError,
+    auth_db,
+)
+from ..login_throttle import FailureThrottle
+from ..middleware import require_user_id
 
 router = APIRouter(prefix="/api/v1", tags=["Metrics", "Agents"])
+
+# Failed enrollment attempts (unknown/used/expired key) allowed per IP per hour.
+ENROLL_FAILURE_LIMIT = 20
+enroll_throttle = FailureThrottle(window_seconds=60 * 60)
+
+
+def _clean_str(value: Any, max_len: int) -> str:
+    """Coerce untrusted registration fields to a short printable string."""
+    if not isinstance(value, str):
+        return ""
+    return "".join(ch for ch in value.strip() if ch.isprintable())[:max_len]
+
+
+async def _owned_agent_ids(request: Request) -> Set[str]:
+    return await run_in_threadpool(auth_db.agent_ids_for_owner, require_user_id(request))
 
 
 @router.post("/metrics")
 async def receive_metrics(request: Request):
     """Прием метрик от агента"""
+    authenticated_id = getattr(request.state, "agent_id", None)
+    if not authenticated_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
         body_bytes = await request.body()
         body_text = body_bytes.decode('utf-8', errors='replace')
@@ -35,8 +69,16 @@ async def receive_metrics(request: Request):
         except Exception as e:
             raise HTTPException(status_code=422, detail=f"Invalid metrics payload: {e}")
         
-        agent_id = payload.get('agent_id')
-        
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=422, detail="Metrics payload must be a JSON object")
+
+        # Агент может писать только за себя: id из тела обязан совпадать с тем, что прошёл
+        # проверку токена, иначе любой агент мог бы подменять метрики чужих.
+        agent_id = payload.get('agent_id', authenticated_id)
+        if agent_id != authenticated_id:
+            raise HTTPException(status_code=403, detail="agent_id does not match the authenticated agent")
+        payload['agent_id'] = authenticated_id
+
         # Обновляем время последней активности
         agent_last_seen[agent_id] = time.time()
         
@@ -64,7 +106,8 @@ async def receive_metrics(request: Request):
                     "status": proc.get('status'),
                     "num_threads": proc.get('num_threads'),
                     "timestamp": current_time,
-                    "name": proc.get('name')
+                    "name": proc.get('name'),
+                    "agent_id": agent_id,
                 }
                 process_history[proc.get('pid', 0)].append(proc_entry)
                 if len(process_history[proc.get('pid', 0)]) > 100:
@@ -76,38 +119,39 @@ async def receive_metrics(request: Request):
             "timestamp": datetime.now().isoformat()
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing metrics: {str(e)}")
 
 
 @router.get("/metrics/latest")
-async def get_latest_metrics(agent_id: Optional[str] = None):
-    """Получение последних метрик"""
-    if not metrics_history:
+async def get_latest_metrics(request: Request, agent_id: Optional[str] = None):
+    """Получение последних метрик (только агенты текущего пользователя)"""
+    owned = await _owned_agent_ids(request)
+    latest = {aid: history[-1] for aid, history in metrics_history.items() if history and aid in owned}
+
+    if not latest:
         return {"message": "No metrics available"}
-    
+
     if agent_id:
-        if agent_id in metrics_history and metrics_history[agent_id]:
-            return metrics_history[agent_id][-1]
-        return {"error": "Agent not found or no metrics"}
-    
-    # Возвращаем последние метрики всех агентов
-    latest = {}
-    for aid, metrics_list in metrics_history.items():
-        if metrics_list:
-            latest[aid] = metrics_list[-1]
+        return latest.get(agent_id) or {"error": "Agent not found or no metrics"}
+
+    # Возвращаем последние метрики всех агентов пользователя
     return latest
 
 
 @router.get("/metrics/history")
 async def get_metrics_history(
+    request: Request,
     agent_id: str,
     metric_type: str = "cpu.usage",
     limit: int = 100,
     timeframe: int = 3600
 ):
     """Получение истории метрик"""
-    if agent_id not in metrics_history:
+    owned = await _owned_agent_ids(request)
+    if agent_id not in owned or agent_id not in metrics_history:
         raise HTTPException(status_code=404, detail="Agent not found")
     
     # Фильтрация по времени
@@ -156,12 +200,13 @@ async def get_metrics_history(
 
 
 @router.get("/metrics/summary")
-async def get_metrics_summary(timeframe: int = 3600):
-    """Сводная статистика по метрикам"""
+async def get_metrics_summary(request: Request, timeframe: int = 3600):
+    """Сводная статистика по метрикам (только агенты текущего пользователя)"""
     summary = {}
+    owned = await _owned_agent_ids(request)
     
     for agent_id, history in metrics_history.items():
-        if not history:
+        if not history or agent_id not in owned:
             continue
         
         # Фильтруем по timeframe
@@ -203,10 +248,13 @@ async def get_metrics_summary(timeframe: int = 3600):
 
 
 @router.get("/agents")
-async def list_agents(status: Optional[str] = None):
-    """Список всех агентов"""
+async def list_agents(request: Request, status: Optional[str] = None):
+    """Список агентов текущего пользователя"""
     agents = []
+    owned = await _owned_agent_ids(request)
     for agent_id, last_seen in agent_last_seen.items():
+        if agent_id not in owned:
+            continue
         agent_status = "active" if time.time() - last_seen < 60 else "inactive"
         
         if status and agent_status != status:
@@ -231,45 +279,83 @@ async def list_agents(status: Optional[str] = None):
     }
 
 
+class EnrollmentKeyRequest(BaseModel):
+    label: Optional[str] = Field(None, max_length=64)
+
+
+@router.post("/agents/enrollment-keys")
+async def create_enrollment_key(
+    request: Request, response: Response, body: Optional[EnrollmentKeyRequest] = None
+):
+    """Создать одноразовый ключ регистрации агента (действует 1 час, показывается один раз)."""
+    owner_id = require_user_id(request)
+    label = _clean_str(body.label, 64) if body and body.label else None
+    try:
+        key, expires_at = await run_in_threadpool(auth_db.create_enrollment_key, owner_id, label or None)
+    except TooManyKeysError:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many unused enrollment keys. Use or wait out the existing ones first.",
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return {"key": key, "expires_at": expires_at, "expires_in_seconds": ENROLLMENT_KEY_TTL_SECONDS}
+
+
 @router.post("/agents/register")
 async def register_agent(request: Request, data: Dict[str, Any]):
-    """Регистрация нового агента"""
-    agent_id = data.get("agent_id")
+    """Регистрация агента по одноразовому ключу. Публичный: авторизация — сам ключ."""
+    ip_key = f"ip:{request.client.host if request.client else 'unknown'}"
+    retry = enroll_throttle.retry_after([(ip_key, ENROLL_FAILURE_LIMIT)])
+    if retry:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed enrollment attempts. Try again later.",
+            headers={"Retry-After": str(retry)},
+        )
+
+    enrollment_key = data.get("enrollment_key")
+    if not isinstance(enrollment_key, str) or not enrollment_key:
+        raise HTTPException(
+            status_code=401,
+            detail="An enrollment key is required. Create one in the dashboard (Settings → Agents → Add Agent).",
+        )
+
+    agent_id = _clean_str(data.get("agent_id"), 128)
     if not agent_id:
         raise HTTPException(status_code=400, detail="agent_id is required")
-    
-    hostname = data.get("hostname", "unknown")
-    ip_address = data.get("ip_address", "")
-    version = data.get("version", "")
-    tags = data.get("tags", [])
-    
-    # Создаём агента и получаем токен
-    token = create_agent_token(
-        agent_id=agent_id,
-        hostname=hostname,
-        ip_address=ip_address,
-        version=version,
-        tags=tags
-    )
-    
-    # Если токен None - агент уже зарегистрирован
-    if token is None:
-        agent_info = get_agent_info(agent_id)
-        if agent_info:
-            return {
-                "status": "already_registered",
-                "agent_id": agent_id,
-                "message": "Agent already registered. Use the token from initial registration.",
-                "timestamp": datetime.now().isoformat(),
-                "info": agent_info
-            }
-        else:
-            raise HTTPException(status_code=500, detail="Failed to register agent")
-    
-    # Сохраняем в памяти
-    agents_registry[agent_id] = data
+
+    hostname = _clean_str(data.get("hostname"), 255) or "unknown"
+    ip_address = _clean_str(data.get("ip_address"), 64)
+    version = _clean_str(data.get("version"), 64)
+    raw_tags = data.get("tags")
+    tags = [_clean_str(t, 64) for t in raw_tags[:20]] if isinstance(raw_tags, list) else []
+
+    try:
+        token = await run_in_threadpool(
+            auth_db.enroll_agent, enrollment_key, agent_id, hostname, ip_address, version, tags
+        )
+    except InvalidEnrollmentKeyError:
+        enroll_throttle.record_failure([ip_key])
+        raise HTTPException(status_code=401, detail="Invalid or expired enrollment key")
+    except AgentExistsError:
+        raise HTTPException(
+            status_code=409,
+            detail="An agent with this agent_id is already registered. Remove it in the "
+                   "dashboard first, or start the agent with a different AGENT_ID.",
+        )
+
+    # In-memory view used by the dashboard. Never keep the enrollment key.
+    features = data.get("features")
+    agents_registry[agent_id] = {
+        "agent_id": agent_id,
+        "hostname": hostname,
+        "ip_address": ip_address,
+        "version": version,
+        "tags": tags,
+        "features": features if isinstance(features, dict) else {},
+    }
     agent_last_seen[agent_id] = time.time()
-    
+
     return {
         "status": "registered",
         "agent_id": agent_id,
@@ -278,3 +364,23 @@ async def register_agent(request: Request, data: Dict[str, Any]):
         "timestamp": datetime.now().isoformat(),
         "warning": "Store this token securely. It will not be shown again."
     }
+
+
+@router.delete("/agents/{agent_id}")
+async def delete_agent(request: Request, agent_id: str):
+    """Удалить своего агента: токен перестаёт работать, agent_id можно зарегистрировать заново."""
+    deleted = await run_in_threadpool(auth_db.delete_agent, agent_id, require_user_id(request))
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    agents_registry.pop(agent_id, None)
+    agent_last_seen.pop(agent_id, None)
+    metrics_history.pop(agent_id, None)
+    for pid in list(process_history):
+        remaining = [e for e in process_history[pid] if e.get("agent_id") != agent_id]
+        if remaining:
+            process_history[pid] = remaining
+        else:
+            del process_history[pid]
+
+    return {"status": "deleted", "agent_id": agent_id}
