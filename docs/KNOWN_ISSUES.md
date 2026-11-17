@@ -21,16 +21,6 @@ Do not infer the shape from the endpoint name or copy it from a neighboring endp
 these differences exist because endpoints were built at different times with different
 conventions. Prefer typing the real envelope over `any`.
 
-## Agent registration is open and can overwrite an existing agent
-
-`POST /api/v1/agents/register` is public, because an agent has no token before it
-registers. It has no rate limit, so anyone who can reach the backend can create unlimited
-fake agents. For an `agent_id` that already exists it returns "already registered" without
-a token, **but still updates that agent's hostname, IP address and version** from the
-request. An unauthenticated caller can therefore falsify the metadata of a real agent.
-The planned fix is an enrollment key issued from the signed-in UI and exchanged once at
-registration.
-
 ## macOS disk reporting is not what it looks like
 
 `disk.Partitions(true)` on macOS returns several mount points (`/`,
@@ -94,18 +84,29 @@ page refresh. There is no backend component that evaluates metrics against thres
 there are no automatically generated alerts: today's alerts and activity entries come from
 actions taken in the UI. See the README's suggested next steps.
 
-## Every signed-in user can see and do everything
+## Every signed-in user can act on the backend host
 
-Access control is now real (a valid session is required everywhere, and an agent token can
-only push metrics), but it is all-or-nothing. Every signed-in user sees the same agents,
-containers and metrics, and can run every container and process action. Sign-up is closed
-after the first account for exactly this reason; do not set `ALLOW_REGISTRATION=true` on
-anything reachable by people you would not give full control to. Per-user ownership of
-agents is the next step.
+Agent data is owned and scoped per user (see [Architecture](ARCHITECTURE.md#agent-enrollment)),
+but everything that runs on the machine the **backend** is on is not: `/system`, `/docker/*`
+(including start/stop/delete and the CIS scan) and `/processes` (including stopping a
+process) work for any signed-in user, because they act on the backend host and not on an
+agent. Sign-up is closed after the first account for exactly this reason; do not set
+`ALLOW_REGISTRATION=true` where people who should not have full control of that host could
+register. The fix is an owner or admin role for these endpoints, and for remote hosts a
+command channel through the agent instead of local execution.
 
-Related, and also unchanged: Docker and process actions run on the **backend host**, not on
-the host an agent reports from. That is fine on one machine; for remote hosts they need a
-command channel through the agent.
+## Process history mixes hosts of one owner
+
+`/process/{pid}/history` keys history by PID alone. It never crosses owners, but two agents
+of the same owner that both run a process with the same PID share one history. Keying by
+(agent, PID) is the proper fix.
+
+## An agent's metadata is frozen at enrollment
+
+Hostname, IP address and version are recorded when an agent enrolls. The old 30-second
+re-registration loop used to refresh them as a side effect; it was removed (it would now fail
+without a key, and `last_seen` is updated by every metrics push anyway). If a host is renamed
+or its IP changes, remove and re-enroll the agent.
 
 ## Login throttling is in memory
 

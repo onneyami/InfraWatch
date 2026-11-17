@@ -27,10 +27,13 @@ On startup it:
 1. Reads `BACKEND_URL` and `AGENT_ID` from the environment, falling back to
    `http://127.0.0.1:8000` and `agent-<hostname>`. The backend URL used to be hardcoded
    to localhost; see [Known Issues](KNOWN_ISSUES.md#agent-was-hardcoded-to-localhost).
-2. Registers with the backend (`POST /api/v1/agents/register`) and receives a per-agent
-   token, cached at `/tmp/ahova_agent_token` so a restart does not re-register.
-3. Starts a background heartbeat goroutine.
-4. On a loop (default every 5 seconds) collects and pushes metrics:
+2. Gets a per-agent token. If one is cached at `/tmp/ahova_agent_token` for this
+   `AGENT_ID` it is reused. Otherwise the agent enrolls with the one-time key in
+   `AHOVA_ENROLL_KEY` (`POST /api/v1/agents/register`) and caches the token it receives. With
+   neither a cached token nor a key it exits with instructions instead of failing silently.
+   The key is read once and removed from the process environment. See
+   [Agent enrollment](#agent-enrollment).
+3. On a loop (default every 5 seconds) collects and pushes metrics:
    - CPU and memory via `gopsutil`.
    - Disk usage, **deduplicated and filtered**. This is not optional on macOS; see
      [Known Issues](KNOWN_ISSUES.md#macos-disk-reporting-is-not-what-it-looks-like).
@@ -83,9 +86,10 @@ Two credential types, for two kinds of caller. They are not interchangeable.
    `ENVIRONMENT=dev`, path `/api`). The token is never in a response body, never in
    `localStorage` and never in a URL, so page JavaScript cannot read it. Only a SHA-256
    hash of it is stored in `users.db`. Sessions last 30 days, fixed.
-2. **Agent token** (`X-Agent-ID` + `X-Agent-Token`). Issued to one agent at registration.
-   It is accepted **only** on `POST /api/v1/metrics`; everywhere else it is rejected. A
-   compromised monitored host can push its own metrics and nothing more.
+2. **Agent token** (`X-Agent-ID` + `X-Agent-Token`). Issued to one agent at enrollment. It is
+   accepted **only** on `POST /api/v1/metrics`, and the `agent_id` inside the pushed payload
+   must match the authenticated agent (otherwise `403`), so an agent can write its own metrics
+   and nothing else. Only a hash of the token is stored.
 
 `middleware.py` applies a **default-deny** policy to everything under `/api/v1/`. A request
 is public only if it is on a short explicit allowlist: `GET /api/v1/health`, the five
@@ -104,9 +108,33 @@ on another site cannot add that header without passing CORS, and the cookie is
 sign-up is closed unless `ALLOW_REGISTRATION=true`. `GET /api/v1/auth/status` tells the UI
 which screen to show. The UI shows a full-screen sign-in whenever there is no session.
 
-**What accounts still do not do:** scope data. Every signed-in user sees every agent and
-container and can run every action. That is the next piece of work; until it lands, keep
-registration closed.
+### Agent enrollment
+
+Agents belong to the user whose enrollment key created them.
+
+1. A signed-in user clicks *Add Agent* (Settings or Hosts). The UI calls
+   `POST /api/v1/agents/enrollment-keys` and shows a ready-to-run command containing the key.
+   The key (`ahk_...`) is valid for **one hour**, works **once**, and only its hash is stored
+   (at most 20 unused keys per user).
+2. The agent runs with `AHOVA_ENROLL_KEY=<key>` and calls the public
+   `POST /api/v1/agents/register`. The backend consumes the key and creates the agent in a
+   single transaction, owned by the key's owner. An unknown, used or expired key gets a
+   uniform `401`, and repeated failures from one IP are throttled (`429`).
+3. If the `agent_id` is already taken the answer is `409`, the existing agent is left
+   completely untouched and the key is **not** consumed. To re-enroll an agent (for example
+   after losing its token), remove it first: the *Remove* button on its host card, or
+   `DELETE /api/v1/agents/{agent_id}`, which revokes its token.
+
+Every agent-data read is filtered by owner: `/agents`, `/metrics/latest`, `/metrics/history`,
+`/metrics/summary` and `/process/{pid}/history`. Someone else's `agent_id` looks exactly like
+one that does not exist (`404`). Agents that predate ownership are assigned to the first
+account when the backend starts (and when the first account is created).
+
+**What access control still does not cover:** everything that runs on the *backend host*
+itself. `/system`, `/docker/*` and `/processes` describe, and can stop things on, the
+machine the backend runs on, and any signed-in user can use them. Keep registration closed
+until those are given an owner or an admin role. See
+[Known issues](KNOWN_ISSUES.md#every-signed-in-user-can-act-on-the-backend-host).
 
 ### Storage
 
@@ -151,7 +179,7 @@ and no React Query: `store/appStore.ts` is the only state container and
 
 ## Data flow, end to end
 
-1. The agent registers once and caches its token.
+1. The agent enrolls once (one-time key) and caches its token.
 2. Every few seconds it pushes a snapshot to `POST /api/v1/metrics`.
 3. The backend keeps the latest snapshot per agent plus a rolling in-memory history for
    `/metrics/history`.

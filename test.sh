@@ -13,9 +13,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 API_BASE="${API_BASE:-http://localhost:8000}"
-# Агент, которого создаёт этот тест. Токен выдаётся один раз, поэтому на повторном запуске
-# с тем же ID регистрация вернёт already_registered (см. ниже). Свежий агент на каждый запуск:
-#   TEST_AGENT_ID="test-agent-$(date +%s)" ./test.sh
+# Агент, которого создаёт этот тест (в конце он удаляется, поэтому запуск можно повторять).
 TEST_AGENT_ID="${TEST_AGENT_ID:-test-agent-001}"
 
 echo -e "${BLUE}══════════════════════════════════════════════════${NC}"
@@ -137,33 +135,51 @@ echo -e "${CYAN}🔐 Authentication Tests${NC}"
 echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
 echo ""
 
-# Тест 7: Регистрация агента
-echo -n "Registering test agent... "
-register_response=$(curl -s -X POST "$API_BASE/api/v1/agents/register" \
-    -H "Content-Type: application/json" \
-    -d "{\"agent_id\": \"$TEST_AGENT_ID\", \"hostname\": \"test-host\", \"version\": \"2.6.0\"}")
+# Тест 7: регистрация агента. Теперь она требует одноразовый ключ, а ключ создаёт вошедший
+# пользователь, так что без AHOVA_USERNAME/AHOVA_PASSWORD эти проверки пропускаются.
+token=""
+if [ "$SIGNED_IN" = "1" ]; then
+    csrf=(-H "X-Requested-With: XMLHttpRequest")
 
-# Извлекаем токен из ответа
-token=$(echo "$register_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    # Убираем агента от прошлого (оборвавшегося) запуска, чтобы ID был свободен
+    curl -s -o /dev/null -b "$COOKIE_JAR" -X DELETE "${csrf[@]}" "$API_BASE/api/v1/agents/$TEST_AGENT_ID"
 
-if [ -n "$token" ]; then
-    echo -e "${GREEN}✓ PASS${NC}"
-    echo -e "  ${YELLOW}Agent ID: ${NC}$TEST_AGENT_ID"
-    echo -e "  ${YELLOW}Token:    ${NC}${token:0:20}..."
-else
-    # Проверяем, не зарегистрирован ли уже агент
-    status=$(echo "$register_response" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
-    if [ "$status" = "already_registered" ]; then
-        # Токен показывается только при регистрации, поэтому для уже существующего агента его
-        # взять неоткуда. /tmp/ahova_agent_token принадлежит РЕАЛЬНОМУ агенту (другой agent_id),
-        # его токен с этим ID вернул бы 401, так что не подставляем его.
-        echo -e "${YELLOW}⚠ ALREADY REGISTERED${NC} (token is only shown once)"
-        echo -e "  ${YELLOW}Skipping the authenticated push. For a fresh agent run:${NC}"
-        echo -e "  ${YELLOW}TEST_AGENT_ID=\"test-agent-\$(date +%s)\" ./test.sh${NC}"
+    echo -n "Creating enrollment key... "
+    key_response=$(curl -s -b "$COOKIE_JAR" -X POST "$API_BASE/api/v1/agents/enrollment-keys" \
+        -H "Content-Type: application/json" "${csrf[@]}" -d '{"label": "test.sh"}')
+    enroll_key=$(echo "$key_response" | grep -o '"key":"[^"]*"' | cut -d'"' -f4)
+    if [ -n "$enroll_key" ]; then
+        echo -e "${GREEN}✓ PASS${NC} (${enroll_key:0:8}...)"
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        echo -e "  Response: $key_response"
+        exit 1
+    fi
+
+    expect_status "Register without a key (should fail)" "$API_BASE/api/v1/agents/register" 401 \
+        -X POST -H "Content-Type: application/json" -d "{\"agent_id\": \"$TEST_AGENT_ID\"}"
+
+    echo -n "Registering test agent with the key... "
+    register_response=$(curl -s -X POST "$API_BASE/api/v1/agents/register" \
+        -H "Content-Type: application/json" \
+        -d "{\"agent_id\": \"$TEST_AGENT_ID\", \"enrollment_key\": \"$enroll_key\", \"hostname\": \"test-host\", \"version\": \"2.6.0\"}")
+    token=$(echo "$register_response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    if [ -n "$token" ]; then
+        echo -e "${GREEN}✓ PASS${NC}"
+        echo -e "  ${YELLOW}Agent ID: ${NC}$TEST_AGENT_ID"
+        echo -e "  ${YELLOW}Token:    ${NC}${token:0:20}..."
     else
         echo -e "${RED}✗ FAIL${NC}"
         echo -e "  Response: $register_response"
+        exit 1
     fi
+
+    expect_status "Re-using the same key (should fail)" "$API_BASE/api/v1/agents/register" 401 \
+        -X POST -H "Content-Type: application/json" \
+        -d "{\"agent_id\": \"$TEST_AGENT_ID-again\", \"enrollment_key\": \"$enroll_key\"}"
+else
+    echo -e "${YELLOW}Skipping agent registration tests: they need an enrollment key, which needs sign-in${NC}"
+    echo -e "${YELLOW}(set AHOVA_USERNAME and AHOVA_PASSWORD)${NC}"
 fi
 
 # Тест 8: Отправка метрик с токеном
@@ -184,6 +200,15 @@ if [ "$response" = "401" ]; then
     echo -e "${GREEN}✓ PASS${NC} (401 as expected)"
 else
     echo -e "${RED}✗ FAIL${NC} (expected 401, got $response)"
+fi
+
+# Убираем за собой тестового агента: его токен перестаёт работать, ID свободен для следующего запуска
+if [ "$SIGNED_IN" = "1" ] && [ -n "$token" ]; then
+    expect_status "Removing the test agent (cleanup)" "$API_BASE/api/v1/agents/$TEST_AGENT_ID" 200 \
+        -X DELETE -b "$COOKIE_JAR" -H "X-Requested-With: XMLHttpRequest"
+    expect_status "Removed agent's token no longer works" "$API_BASE/api/v1/metrics" 401 \
+        -X POST -H "Content-Type: application/json" -H "X-Agent-ID: $TEST_AGENT_ID" -H "X-Agent-Token: $token" \
+        -d "{\"agent_id\": \"$TEST_AGENT_ID\", \"timestamp\": $(date +%s)}"
 fi
 
 echo ""

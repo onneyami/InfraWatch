@@ -122,6 +122,18 @@ Do this after any change to `main.go`. The compiled binary is git-ignored, and
 `ahova start` uses whatever was last built, so forgetting to rebuild after an agent
 change is an easy trap. Watch the build output for compile errors.
 
+**Enrolling a new agent.** An agent needs a one-time key the first time it runs. In the
+dashboard open *Settings → Agents → Add Agent* (or the Hosts page), choose an Agent ID and
+generate a key; the drawer shows the exact command. With the CLI the key passes through to
+the agent, because the environment is inherited:
+
+```bash
+AHOVA_ENROLL_KEY=ahk_... AGENT_ID=my-server ahova restart
+```
+
+The agent stores its token in `/tmp/ahova_agent_token` and does not need the key again. If
+you remove an agent in the dashboard, delete that file and enroll again with a new key.
+
 ### Database location
 
 The SQLite files live in `backend/` (`backend/agents.db`, `backend/users.db`). Until
@@ -170,6 +182,7 @@ Scripts that call protected endpoints (like `test.sh`) can sign in with
 |---|---|---|
 | `BACKEND_URL` | Agent | Where to register and push metrics. Default `http://127.0.0.1:8000`. |
 | `AGENT_ID` | Agent | Overrides the default `agent-<hostname>`. |
+| `AHOVA_ENROLL_KEY` | Agent | One-time key from the dashboard, needed only when the agent has no saved token. Read once and removed from the process environment. |
 | `AGENT_DEBUG` | Agent | `1` enables verbose logging. `run-dev.sh` sets it. |
 | `ENVIRONMENT` | Backend | `dev` (default), `staging` or `prod`. Selects the default CORS origins and whether the session cookie is `Secure`. |
 | `COOKIE_SECURE` | Backend | Force the session cookie's `Secure` flag on/off. Default: on unless `ENVIRONMENT=dev`. Browsers drop `Secure` cookies over plain http (except on localhost). |

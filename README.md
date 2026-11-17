@@ -27,7 +27,8 @@ big picture and points you to the rest of `docs/` for depth. Read this first, th
   the host the backend runs on.
 - **Accounts** — the dashboard requires sign-in (PBKDF2-hashed passwords, HttpOnly session
   cookie; the first account is created on first run, and sign-up is then closed). Agents
-  use their own tokens and can only push metrics (see
+  belong to the user who enrolled them (one-time enrollment key), use their own tokens and can
+  only push metrics (see
   [Architecture → Authentication](docs/ARCHITECTURE.md#authentication)).
 - **Alerts & Activity** — a live feed of actions taken through the UI (container
   restarted, process killed, scan started, etc.) plus optional desktop notifications and
@@ -106,15 +107,16 @@ behind each.
    will not catch regressions. Start with pytest integration tests for the auth and
    Docker/metrics routers and a handful of end-to-end tests (Overview loads, Docker
    table renders, login works).
-2. **Per-user ownership.** Scope agents and actions to the user who enrolled them, then
-   consider opening registration. See [Known issues](docs/KNOWN_ISSUES.md).
+2. **Protect the backend host.** `/system`, `/docker/*` and `/processes` act on the machine
+   the backend runs on and are open to every signed-in user; give them an owner or admin role,
+   then consider opening registration. See [Known issues](docs/KNOWN_ISSUES.md).
 3. **A real alerting engine.** Thresholds, persistence, and a backend that generates
    alerts from actual metric conditions, rather than the frontend only logging its own
    user-triggered actions.
 4. **Persist metrics history.** It currently lives in backend memory and is lost on
    restart. A SQLite table with a retention window would close this gap.
-5. **Agent enrollment keys.** Agent registration is public and can overwrite an existing
-   agent's metadata; replace it with a one-time key issued from the UI.
+5. **Remote hosts.** A command channel through the agent, so container and process actions
+   run on the host an agent reports from rather than on the backend host.
 
 ## License
 
