@@ -24,6 +24,7 @@ import os
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from starlette.exceptions import HTTPException
 from starlette import status
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -100,6 +101,18 @@ def classify(method: str, path: str) -> str:
     if path.startswith("/api/v1/"):
         return USER
     return PUBLIC  # non-API paths (e.g. /docs/oauth2-redirect) carry no data
+
+
+def require_user_id(request: Request) -> int:
+    """Id of the signed-in user for handlers behind the USER policy.
+
+    The middleware always sets ``request.state.user`` for those routes; failing closed here
+    keeps a handler safe even if it is ever mounted outside the policy table by mistake.
+    """
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return user["id"]
 
 
 def _error(code: int, detail: str) -> JSONResponse:

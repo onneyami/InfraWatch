@@ -31,12 +31,14 @@ requests/minute per user and endpoint, 60 per agent and endpoint (`429` beyond t
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/agents/register` | Public. Returns a per-agent token. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md#agent-registration-is-open-and-can-overwrite-an-existing-agent). |
-| `POST` | `/metrics` | The agent pushes its snapshot here. Requires the agent token. |
-| `GET` | `/metrics/latest` | Returns `{ [agentId]: AgentMetrics }`, a bare object keyed by agent ID, **not** wrapped in `{ agents: {...} }`. |
+| `POST` | `/agents/enrollment-keys` | Signed-in user. Optional body `{ "label": "..." }`. Returns `{ key, expires_at, expires_in_seconds }`. The key (`ahk_...`) is shown once, works once and expires in one hour. `429` after 20 unused keys. |
+| `POST` | `/agents/register` | Public; the enrollment key is the credential. Body: `agent_id`, `enrollment_key`, `hostname`, `ip_address`, `version`, `tags`. Returns the per-agent token once. `401` for a missing, unknown, used or expired key (failures are throttled: `429` after 20 per hour per IP); `409` if `agent_id` is taken, in which case nothing is modified and the key stays valid. |
+| `DELETE` | `/agents/{agent_id}` | Signed-in owner. Removes the agent, revokes its token and drops its in-memory data. `404` if it does not exist or is not yours. |
+| `POST` | `/metrics` | The agent pushes its snapshot here. Requires the agent token, and `agent_id` in the body must match the authenticated agent (`403` otherwise). |
+| `GET` | `/metrics/latest` | Returns `{ [agentId]: AgentMetrics }`, a bare object keyed by agent ID, **not** wrapped in `{ agents: {...} }`. Only your own agents. |
 | `GET` | `/metrics/history` | Query: `agent_id`, `metric_type` (a dotted path into the raw payload, e.g. `cpu.usage`), `limit`, `timeframe` (seconds; pass it explicitly). |
-| `GET` | `/metrics/summary` | |
-| `GET` | `/agents` | Registered agents. |
+| `GET` | `/metrics/summary` | Only your own agents. |
+| `GET` | `/agents` | Your registered agents. |
 
 `metric_type` is a literal dotted-path lookup into whatever the agent posted, not a fixed
 enum. Fields nested inside arrays, such as `network.interfaces[].bytes_sent`, are not

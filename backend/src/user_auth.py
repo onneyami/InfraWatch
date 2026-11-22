@@ -121,6 +121,12 @@ class UserAuthDB:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
+    def first_user_id(self) -> Optional[int]:
+        """Id of the oldest account (it adopts agents that predate ownership), or None."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT MIN(id) FROM users").fetchone()
+        return row[0]
+
     def register(
         self, username: str, email: str, password: str, *, allow_additional: bool = False
     ) -> Dict[str, Any]:

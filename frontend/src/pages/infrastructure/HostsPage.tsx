@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Server, Plus, Copy, Check } from 'lucide-react'
+import { Server, Plus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { theme } from '../../theme/tokens'
 import { AhovaCard } from '../../components/ui/AhovaCard'
 import { AhovaBadge } from '../../components/ui/AhovaBadge'
 import { AhovaButton } from '../../components/ui/AhovaButton'
-import { AhovaDrawer } from '../../components/ui/AhovaDrawer'
+import { AddAgentDrawer } from '../../components/agents/AddAgentDrawer'
+import { api } from '../../services/api'
 import { useAppStore } from '../../store/appStore'
 
 export const HostsPage: React.FC = () => {
-  const { agents, selectedHostId, setSelectedHostId } = useAppStore()
+  const { agents, setAgents, selectedHostId, setSelectedHostId } = useAppStore()
   const hostList = Object.entries(agents)
   const [showAddAgent, setShowAddAgent] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
@@ -26,16 +26,16 @@ export const HostsPage: React.FC = () => {
     return () => clearTimeout(timer)
   }, [selectedHostId, setSelectedHostId])
 
-  // Backend URL берём из того же места, что и остальной фронтенд — окружение
-  // определяет, куда агенту слать метрики.
-  const backendUrl = window.location.protocol + '//' + window.location.hostname + ':8000'
-  const installCommand = `BACKEND_URL=${backendUrl} AGENT_ID=my-server ./agent`
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(installCommand)
-    setCopied(true)
-    toast.success('Command copied to clipboard')
-    setTimeout(() => setCopied(false), 2000)
+  const handleRemove = async (id: string, name: string) => {
+    if (!window.confirm(`Remove ${name}? Its token stops working and its history is dropped. To monitor it again you will need a new enrollment key.`)) return
+    try {
+      await api.deleteAgent(id)
+      const { [id]: _removed, ...rest } = agents
+      setAgents(rest)
+      toast.success(`${name} removed`)
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Could not remove the agent')
+    }
   }
 
   return (
@@ -80,7 +80,17 @@ export const HostsPage: React.FC = () => {
                     <div style={{ fontSize: 11, color: theme.colors.text.muted }}>{id.slice(0, 12)}...</div>
                   </div>
                 </div>
-                <AhovaBadge variant="healthy">Online</AhovaBadge>
+                <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing[2] }}>
+                  <AhovaBadge variant="healthy">Online</AhovaBadge>
+                  <button
+                    onClick={() => handleRemove(id, agent.system?.hostname || id)}
+                    aria-label="Remove agent"
+                    title="Remove agent"
+                    style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: theme.radius.sm, background: 'transparent', color: theme.colors.text.muted, cursor: 'pointer' }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: theme.spacing[3] }}>
@@ -118,52 +128,7 @@ export const HostsPage: React.FC = () => {
         </div>
       )}
 
-      <AhovaDrawer open={showAddAgent} onClose={() => setShowAddAgent(false)} title="Add Agent">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: theme.spacing[4] }}>
-          <p style={{ fontSize: 13, color: theme.colors.text.secondary, lineHeight: 1.6 }}>
-            Скопируйте команду на сервере, который хотите мониторить, и запустите
-            скомпилированный бинарник агента (<code>make build-agent</code> в корне проекта).
-            Агент зарегистрируется и начнёт присылать метрики автоматически.
-          </p>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: theme.spacing[2],
-              padding: theme.spacing[3],
-              background: theme.colors.bg.secondary,
-              border: `1px solid ${theme.colors.border.default}`,
-              borderRadius: theme.radius.sm,
-              fontFamily: 'monospace',
-              fontSize: 12,
-            }}
-          >
-            <code style={{ flex: 1, wordBreak: 'break-all' }}>{installCommand}</code>
-            <button
-              onClick={handleCopy}
-              style={{
-                flexShrink: 0,
-                width: 28,
-                height: 28,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: 'none',
-                borderRadius: theme.radius.sm,
-                background: 'transparent',
-                color: theme.colors.text.secondary,
-                cursor: 'pointer',
-              }}
-            >
-              {copied ? <Check size={14} color={theme.colors.status.healthy} /> : <Copy size={14} />}
-            </button>
-          </div>
-          <p style={{ fontSize: 12, color: theme.colors.text.muted }}>
-            Важно: агент должен иметь сетевой доступ к <code>{backendUrl}</code>.
-            Если бэкенд не доступен снаружи localhost, потребуется настроить сеть/firewall отдельно.
-          </p>
-        </div>
-      </AhovaDrawer>
+      <AddAgentDrawer open={showAddAgent} onClose={() => setShowAddAgent(false)} />
     </div>
   )
 }

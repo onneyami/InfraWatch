@@ -8,6 +8,7 @@ the app actually registers, so a new endpoint cannot ship unauthenticated by acc
 
 import pathlib
 import re
+import time
 import unittest
 
 try:
@@ -17,9 +18,10 @@ except ImportError as exc:  # pragma: no cover - depends on the environment
     raise unittest.SkipTest(f"FastAPI test dependencies not installed: {exc}")
 
 from src import middleware as mw
+from src import stores
 from src.auth import auth_db
 from src.core.config import SESSION_COOKIE_NAME
-from src.routers import auth_router
+from src.routers import auth_router, metrics_router
 from src.user_auth import user_auth_db
 
 CSRF = {"X-Requested-With": "XMLHttpRequest"}
@@ -63,10 +65,14 @@ def reset_state():
         conn.execute("DELETE FROM sessions")
         conn.execute("DELETE FROM users")
     agents = auth_db._get_connection()
-    agents.execute("DELETE FROM rate_limits")
+    for table in ("rate_limits", "agents", "enrollment_keys"):
+        agents.execute(f"DELETE FROM {table}")
     agents.commit()
+    for store in (stores.metrics_history, stores.agents_registry, stores.agent_last_seen, stores.process_history):
+        store.clear()
     auth_router.login_throttle._failures.clear()
     auth_router.register_throttle._failures.clear()
+    metrics_router.enroll_throttle._failures.clear()
 
 
 class RouteInventoryTests(unittest.TestCase):
@@ -97,7 +103,6 @@ class RouteInventoryTests(unittest.TestCase):
 
     def test_agent_credentials_do_not_open_dashboard_routes(self):
         reset_state()
-        auth_db._get_connection().execute("DELETE FROM agents")
         token = auth_db.create_agent("inventory-agent", "h", "10.0.0.1", "1", [])
         headers = {"X-Agent-ID": "inventory-agent", "X-Agent-Token": token}
         client = TestClient(app)
@@ -169,6 +174,106 @@ class AuthFlowTests(unittest.TestCase):
         token = "dev-dashboard-token-change-me"
         self.assertEqual(self.client.get("/api/v1/docker/metrics", headers={"X-Dashboard-Token": token}).status_code, 401)
         self.assertEqual(self.client.get(f"/api/v1/docker/metrics?dashboard_token={token}").status_code, 401)
+
+
+def metrics(agent_id, cpu=5.0):
+    return {"agent_id": agent_id, "timestamp": time.time(), "cpu": {"usage": cpu}, "memory": {"used_percent": 1.0},
+            "processes": [{"pid": 4242, "name": f"proc-of-{agent_id}"}]}
+
+
+class AgentEnrollmentTests(unittest.TestCase):
+    def setUp(self):
+        reset_state()
+        self.alice = TestClient(app)
+        self.alice.post("/api/v1/auth/register", json=ALICE)
+        self.alice_id = user_auth_db.first_user_id()
+
+    def second_user(self):
+        user_auth_db.register("bob", "bob@example.com", "correct-horse", allow_additional=True)
+        bob = TestClient(app)
+        r = bob.post("/api/v1/auth/login", json={"username_or_email": "bob", "password": "correct-horse"})
+        self.assertEqual(r.status_code, 200, r.text)
+        return bob
+
+    def key_for(self, client):
+        r = client.post("/api/v1/agents/enrollment-keys", json={"label": "test"}, headers=CSRF)
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["key"]
+
+    def enroll(self, key, agent_id, **extra):
+        # agents register without a browser session
+        return TestClient(app).post("/api/v1/agents/register",
+                                    json={"agent_id": agent_id, "enrollment_key": key, "hostname": "h", **extra})
+
+    def push(self, token, agent_id, body=None):
+        return TestClient(app).post("/api/v1/metrics", json=body or metrics(agent_id),
+                                    headers={"X-Agent-ID": agent_id, "X-Agent-Token": token})
+
+    def test_enrol_push_and_see_the_agent(self):
+        key = self.key_for(self.alice)
+        self.assertTrue(key.startswith("ahk_"))
+        r = self.enroll(key, "srv-1")
+        self.assertEqual(r.status_code, 200, r.text)
+        token = r.json()["token"]
+        self.assertEqual(self.push(token, "srv-1").status_code, 200)
+        self.assertEqual({a["id"] for a in self.alice.get("/api/v1/agents").json()["agents"]}, {"srv-1"})
+        self.assertIn("srv-1", self.alice.get("/api/v1/metrics/latest").json())
+
+    def test_creating_a_key_needs_a_session_and_the_csrf_header(self):
+        self.assertEqual(TestClient(app).post("/api/v1/agents/enrollment-keys", headers=CSRF).status_code, 401)
+        self.assertEqual(self.alice.post("/api/v1/agents/enrollment-keys").status_code, 403)
+
+    def test_registration_requires_a_valid_unused_key(self):
+        anonymous = TestClient(app)
+        for body in ({"agent_id": "x"}, {"agent_id": "x", "enrollment_key": "ahk_nope"}):
+            self.assertEqual(anonymous.post("/api/v1/agents/register", json=body).status_code, 401)
+        key = self.key_for(self.alice)
+        self.assertEqual(self.enroll(key, "srv-1").status_code, 200)
+        self.assertEqual(self.enroll(key, "srv-2").status_code, 401)           # one-time
+
+    def test_taken_agent_id_is_409_and_the_existing_agent_is_untouched(self):
+        self.enroll(self.key_for(self.alice), "srv-1", ip_address="10.0.0.1")
+        r = self.enroll(self.key_for(self.alice), "srv-1", hostname="evil", ip_address="6.6.6.6")
+        self.assertEqual(r.status_code, 409)
+        info = auth_db.get_agent("srv-1")
+        self.assertEqual((info["hostname"], info["ip_address"]), ("h", "10.0.0.1"))
+
+    def test_an_agent_cannot_push_metrics_as_another_agent(self):
+        t1 = self.enroll(self.key_for(self.alice), "srv-1").json()["token"]
+        self.enroll(self.key_for(self.alice), "srv-2")
+        self.assertEqual(self.push(t1, "srv-1", metrics("srv-2")).status_code, 403)
+        self.assertNotIn("srv-2", stores.metrics_history)
+
+    def test_users_only_see_their_own_agents(self):
+        bob = self.second_user()
+        ta = self.enroll(self.key_for(self.alice), "alice-srv").json()["token"]
+        tb = self.enroll(self.key_for(bob), "bob-srv").json()["token"]
+        self.push(ta, "alice-srv")
+        self.push(tb, "bob-srv")
+        self.assertEqual({a["id"] for a in self.alice.get("/api/v1/agents").json()["agents"]}, {"alice-srv"})
+        self.assertEqual({a["id"] for a in bob.get("/api/v1/agents").json()["agents"]}, {"bob-srv"})
+        self.assertEqual(set(self.alice.get("/api/v1/metrics/latest").json()), {"alice-srv"})
+        self.assertEqual(self.alice.get("/api/v1/metrics/history", params={"agent_id": "bob-srv"}).status_code, 404)
+        self.assertEqual(set(self.alice.get("/api/v1/metrics/summary").json()["summary"]), {"alice-srv"})
+        procs = self.alice.get("/api/v1/process/4242/history").json()
+        self.assertEqual({e["name"] for e in procs["history"]}, {"proc-of-alice-srv"})
+
+    def test_deleting_an_agent_is_owner_only_and_revokes_its_token(self):
+        bob = self.second_user()
+        token = self.enroll(self.key_for(self.alice), "alice-srv").json()["token"]
+        self.assertEqual(bob.delete("/api/v1/agents/alice-srv", headers=CSRF).status_code, 404)
+        self.assertEqual(self.push(token, "alice-srv").status_code, 200)
+        self.assertEqual(self.alice.delete("/api/v1/agents/alice-srv", headers=CSRF).status_code, 200)
+        self.assertEqual(self.push(token, "alice-srv").status_code, 401)
+        self.assertEqual(self.alice.delete("/api/v1/agents/alice-srv").status_code, 403)  # CSRF header required
+
+    def test_agents_that_predate_ownership_go_to_the_first_account(self):
+        reset_state()
+        auth_db.create_agent("legacy-agent")
+        self.assertIsNone(auth_db.get_agent_owner("legacy-agent"))
+        client = TestClient(app)
+        client.post("/api/v1/auth/register", json=ALICE)
+        self.assertEqual(auth_db.get_agent_owner("legacy-agent"), user_auth_db.first_user_id())
 
 
 if __name__ == "__main__":

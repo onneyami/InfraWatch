@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import asyncio
+import logging
 
 from .middleware import (
     auth_middleware,
@@ -12,6 +13,7 @@ from .middleware import (
     limiter
 )
 from .stores import cleanup_old_metrics
+from .auth import auth_db
 from .user_auth import user_auth_db
 
 # Import routers
@@ -63,6 +65,13 @@ app.include_router(auth_router)
 async def startup_event():
     """Start background tasks."""
     user_auth_db.purge_expired_sessions()
+    # Agents created before ownership existed belong to the first account.
+    first_user = user_auth_db.first_user_id()
+    if first_user is not None:
+        adopted = auth_db.adopt_orphan_agents(first_user)
+        if adopted:
+            logging.getLogger(__name__).warning(
+                "Assigned %d existing agent(s) to the first account (user id %s)", adopted, first_user)
     asyncio.create_task(cleanup_old_metrics_task())
     print("✅ Ahova API v2.6 started")
     print("📚 API Documentation: http://localhost:8000/docs")

@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from ..auth import auth_db
 from ..core.config import ALLOW_REGISTRATION, COOKIE_SECURE, SESSION_COOKIE_NAME
 from ..login_throttle import FailureThrottle
 from ..user_auth import (
@@ -126,6 +127,10 @@ async def register(body: RegisterRequest, request: Request, response: Response):
         raise HTTPException(status_code=422, detail=str(e))
     except UserExistsError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+    # Agents that predate ownership belong to the first account.
+    if await run_in_threadpool(user_auth_db.first_user_id) == user["id"]:
+        await run_in_threadpool(auth_db.adopt_orphan_agents, user["id"])
 
     token = await run_in_threadpool(user_auth_db.create_session, user["id"])
     _set_session_cookie(response, token)

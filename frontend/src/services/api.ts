@@ -117,6 +117,16 @@ export const api = {
     return res.data
   },
 
+  // Агенты: ключ регистрации (одноразовый, действует час, показывается один раз) и удаление.
+  createEnrollmentKey: async (label?: string) => {
+    const res = await httpClient.post('/agents/enrollment-keys', { label })
+    return res.data as { key: string; expires_at: number; expires_in_seconds: number }
+  },
+
+  deleteAgent: async (agentId: string) => {
+    await httpClient.delete(`/agents/${encodeURIComponent(agentId)}`)
+  },
+
   // Agent metrics — GET /api/v1/metrics/latest отдаёт Record<agentId, AgentMetrics>
   // НАПРЯМУЮ, без обёртки {agents: ...}.
   getAgentMetrics: async (): Promise<Record<string, AgentMetrics>> => {
