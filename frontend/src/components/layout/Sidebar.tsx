@@ -2,6 +2,7 @@ import React from 'react'
 import { LayoutDashboard, Server, Container, Activity, Shield, Bell, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import { theme } from '../../theme/tokens'
 import { useAppStore } from '../../store/appStore'
+import { isAdminPage } from '../../utils/adminPages'
 
 const navItems = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={18} /> },
@@ -17,6 +18,7 @@ export const Sidebar: React.FC = () => {
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const toggle = useAppStore((s) => s.toggleSidebar)
   const currentPage = useAppStore((s) => s.currentPage)
+  const isAdmin = useAppStore((s) => s.currentUser?.is_admin === true)
   const navigate = useAppStore((s) => s.navigate)
 
   return (
@@ -51,7 +53,7 @@ export const Sidebar: React.FC = () => {
 
       {/* Nav */}
       <nav style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-        {navItems.map((item) => {
+        {navItems.filter((item) => isAdmin || !isAdminPage(item.id)).map((item) => {
           const active = currentPage === item.id
           return (
             <div

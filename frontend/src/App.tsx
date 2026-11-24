@@ -18,9 +18,15 @@ import { api, setUnauthorizedHandler } from './services/api'
 import { DEMO_ALERTS } from './services/mockData'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { AuthGate } from './components/auth/AuthGate'
+import { AdminOnlyNotice } from './components/auth/AdminOnlyNotice'
+import { isAdminPage } from './utils/adminPages'
 
 const PageRouter: React.FC = () => {
   const currentPage = useAppStore((s) => s.currentPage)
+  const isAdmin = useAppStore((s) => s.currentUser?.is_admin === true)
+
+  // The API refuses these pages' data to non-administrators; show why instead of errors.
+  if (!isAdmin && isAdminPage(currentPage)) return <AdminOnlyNotice />
 
   switch (currentPage) {
     case 'overview': return <OverviewPage />
@@ -40,6 +46,7 @@ const App: React.FC = () => {
   const { setAgents, setAlerts, setEvents, setDockerInfo, setLoading, restoreSession } = useAppStore()
   const authReady = useAppStore((s) => s.authReady)
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null)
+  const currentUserIsAdmin = useAppStore((s) => s.currentUser?.is_admin === true)
 
   // Пока активно дорабатываем дизайн Welcome Screen — показываем его при
   // каждой загрузке страницы (без persistence), чтобы не путать тестирование
@@ -83,11 +90,14 @@ const App: React.FC = () => {
         if (!cancelled) setLoading('agents', false)
       }
 
-      try {
-        const dockerInfo = await api.getDockerInfo()
-        if (!cancelled) setDockerInfo(dockerInfo)
-      } catch (e) {
-        console.error('Failed to fetch docker info:', e)
+      // Docker describes the backend host: administrators only (others would just get 403)
+      if (currentUserIsAdmin) {
+        try {
+          const dockerInfo = await api.getDockerInfo()
+          if (!cancelled) setDockerInfo(dockerInfo)
+        } catch (e) {
+          console.error('Failed to fetch docker info:', e)
+        }
       }
     }
 
@@ -98,7 +108,7 @@ const App: React.FC = () => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [currentUserId])
+  }, [currentUserId, currentUserIsAdmin])
 
   if (showWelcome) {
     return <WelcomeScreen onGetStarted={handleGetStarted} />

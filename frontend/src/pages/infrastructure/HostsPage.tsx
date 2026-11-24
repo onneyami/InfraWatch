@@ -6,7 +6,7 @@ import { AhovaCard } from '../../components/ui/AhovaCard'
 import { AhovaBadge } from '../../components/ui/AhovaBadge'
 import { AhovaButton } from '../../components/ui/AhovaButton'
 import { AddAgentDrawer } from '../../components/agents/AddAgentDrawer'
-import { api } from '../../services/api'
+import { api, type RegisteredAgent } from '../../services/api'
 import { useAppStore } from '../../store/appStore'
 
 export const HostsPage: React.FC = () => {
@@ -15,6 +15,18 @@ export const HostsPage: React.FC = () => {
   const [showAddAgent, setShowAddAgent] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  // Every agent the user owns, from the database. The metrics store only holds agents that
+  // are sending data, so agents that went quiet would otherwise be invisible and unremovable.
+  const [registered, setRegistered] = useState<RegisteredAgent[]>([])
+  useEffect(() => {
+    let cancelled = false
+    api.getAgentList()
+      .then((res) => { if (!cancelled) setRegistered(res.agents) })
+      .catch((e) => console.error('Failed to fetch agent list:', e))
+    return () => { cancelled = true }
+  }, [agents]) // refreshed on every metrics poll
+  const notReporting = registered.filter((a) => !(a.id in agents))
 
   // Пришли сюда кликом по хосту на Overview — подсвечиваем и скроллим к нему.
   useEffect(() => {
@@ -32,6 +44,7 @@ export const HostsPage: React.FC = () => {
       await api.deleteAgent(id)
       const { [id]: _removed, ...rest } = agents
       setAgents(rest)
+      setRegistered((prev) => prev.filter((a) => a.id !== id))
       toast.success(`${name} removed`)
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Could not remove the agent')
@@ -43,13 +56,14 @@ export const HostsPage: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing[6] }}>
         <p style={{ fontSize: theme.fontSize.sm, color: theme.colors.text.secondary }}>
           {hostList.length} connected machine{hostList.length !== 1 ? 's' : ''}
+          {notReporting.length > 0 && `, ${notReporting.length} not reporting`}
         </p>
         <AhovaButton variant="primary" size="md" icon={<Plus size={16} />} onClick={() => setShowAddAgent(true)}>
           Add Agent
         </AhovaButton>
       </div>
 
-      {hostList.length === 0 ? (
+      {hostList.length === 0 && notReporting.length === 0 ? (
         <AhovaCard>
           <div style={{ textAlign: 'center', padding: theme.spacing[8], color: theme.colors.text.muted }}>
             <Server size={48} style={{ margin: '0 auto', opacity: 0.3, marginBottom: theme.spacing[4] }} />
@@ -57,7 +71,7 @@ export const HostsPage: React.FC = () => {
             <p style={{ fontSize: 13 }}>Install an agent to start monitoring</p>
           </div>
         </AhovaCard>
-      ) : (
+      ) : hostList.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: theme.spacing[4] }}>
           {hostList.map(([id, agent]) => (
             <AhovaCard
@@ -125,6 +139,48 @@ export const HostsPage: React.FC = () => {
               </div>
             </AhovaCard>
           ))}
+        </div>
+      )}
+
+      {notReporting.length > 0 && (
+        <div style={{ marginTop: hostList.length > 0 ? theme.spacing[8] : 0 }}>
+          <h3 style={{ fontSize: theme.fontSize.sm, fontWeight: 600, color: theme.colors.text.primary, margin: `0 0 ${theme.spacing[1]}` }}>
+            Not reporting
+          </h3>
+          <p style={{ fontSize: 12, color: theme.colors.text.muted, margin: `0 0 ${theme.spacing[4]}`, lineHeight: 1.6 }}>
+            These agents are enrolled but are not sending metrics. If one has lost its token, remove it here and
+            enroll it again with a new key.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: theme.spacing[4] }}>
+            {notReporting.map((a) => (
+              <AhovaCard key={a.id} variant="default" style={{ cursor: 'default' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing[3], minWidth: 0 }}>
+                    <Server size={18} style={{ color: theme.colors.text.muted, flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: theme.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {a.hostname !== 'unknown' ? a.hostname : a.id}
+                      </div>
+                      <div style={{ fontSize: 12, color: theme.colors.text.muted }}>
+                        {a.id} · last seen {a.last_seen ? new Date(a.last_seen * 1000).toLocaleString() : 'never'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: theme.spacing[2], flexShrink: 0 }}>
+                    <AhovaBadge variant="warning">No data</AhovaBadge>
+                    <button
+                      onClick={() => handleRemove(a.id, a.hostname !== 'unknown' ? a.hostname : a.id)}
+                      aria-label="Remove agent"
+                      title="Remove agent"
+                      style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: theme.radius.sm, background: 'transparent', color: theme.colors.text.muted, cursor: 'pointer' }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </AhovaCard>
+            ))}
+          </div>
         </div>
       )}
 

@@ -12,6 +12,26 @@ import {
   ProcessInfo,
 } from '../types/metrics'
 
+export interface User {
+  id: number
+  username: string
+  email: string
+  /** Administrators may use the backend-host endpoints (Docker, processes, system, security). */
+  is_admin: boolean
+}
+
+/** One row of GET /agents: every agent the user owns, including ones that stopped reporting. */
+export interface RegisteredAgent {
+  id: string
+  status: 'active' | 'inactive'
+  hostname: string
+  version: string
+  ip_address: string
+  last_seen: number // epoch seconds, 0 if never seen
+  registered_at: string
+  metrics_count: number
+}
+
 // Используем относительный путь — Vite dev server проксирует /api на бэкенд, а в проде
 // фронт и API живут на одном origin за reverse proxy.
 //
@@ -115,6 +135,12 @@ export const api = {
   getHealth: async () => {
     const res = await httpClient.get('/health')
     return res.data
+  },
+
+  // Все агенты пользователя из базы, в том числе замолчавшие (в /metrics/latest их нет).
+  getAgentList: async () => {
+    const res = await httpClient.get('/agents')
+    return res.data as { count: number; active_count: number; agents: RegisteredAgent[] }
   },
 
   // Агенты: ключ регистрации (одноразовый, действует час, показывается один раз) и удаление.
@@ -291,12 +317,12 @@ export const api = {
 
   register: async (username: string, email: string, password: string) => {
     const res = await httpClient.post('/auth/register', { username, email, password })
-    return res.data.user as { id: number; username: string; email: string }
+    return res.data.user as User
   },
 
   login: async (usernameOrEmail: string, password: string) => {
     const res = await httpClient.post('/auth/login', { username_or_email: usernameOrEmail, password })
-    return res.data.user as { id: number; username: string; email: string }
+    return res.data.user as User
   },
 
   logout: async () => {
@@ -305,6 +331,6 @@ export const api = {
 
   getCurrentUser: async () => {
     const res = await httpClient.get('/auth/me')
-    return res.data.user as { id: number; username: string; email: string }
+    return res.data.user as User
   },
 }
