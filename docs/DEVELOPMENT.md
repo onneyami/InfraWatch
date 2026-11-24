@@ -142,6 +142,19 @@ backend moves an existing `backend/src/*.db` to `backend/` automatically and log
 warning. If both locations contain a file it uses `backend/`, never overwrites anything,
 and warns, so remove the stale `backend/src/` copy once you have checked it.
 
+### Making someone an administrator
+
+There is no user-management UI yet. To change a role, edit `backend/users.db` directly; the
+backend reads the role on every request, so no restart or sign-out is needed:
+
+```bash
+sqlite3 backend/users.db "UPDATE users SET is_admin = 1 WHERE username = 'name'"   # promote
+sqlite3 backend/users.db "UPDATE users SET is_admin = 0 WHERE username = 'name'"   # demote
+```
+
+Keep at least one administrator: without one nobody can reach the Docker, process and system
+endpoints.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on every push to `main`/`master` and on every pull request:
@@ -165,8 +178,8 @@ without the expected lists in that file being updated on purpose.
 ### First run and signing in
 
 There is no shared dashboard token any more. Start the stack, open the dashboard and create
-the first account on the first-run screen. After that, sign-up is closed (set
-`ALLOW_REGISTRATION=true` to open it). If you have an old `VITE_DASHBOARD_TOKEN` line in
+the first account on the first-run screen; it becomes the administrator. After that, sign-up
+is closed (set `ALLOW_REGISTRATION=true` to open it; new accounts are ordinary users). If you have an old `VITE_DASHBOARD_TOKEN` line in
 `frontend/.env` or a `DASHBOARD_API_TOKEN` in your environment, delete it: both are ignored.
 Existing accounts keep working; everyone is signed out once, because session tokens are now
 stored hashed.
@@ -186,6 +199,6 @@ Scripts that call protected endpoints (like `test.sh`) can sign in with
 | `AGENT_DEBUG` | Agent | `1` enables verbose logging. `run-dev.sh` sets it. |
 | `ENVIRONMENT` | Backend | `dev` (default), `staging` or `prod`. Selects the default CORS origins and whether the session cookie is `Secure`. |
 | `COOKIE_SECURE` | Backend | Force the session cookie's `Secure` flag on/off. Default: on unless `ENVIRONMENT=dev`. Browsers drop `Secure` cookies over plain http (except on localhost). |
-| `ALLOW_REGISTRATION` | Backend | `true` allows self-service sign-up after the first account. Default `false`. Keep it off until data is scoped per user. |
+| `ALLOW_REGISTRATION` | Backend | `true` allows self-service sign-up after the first account; new accounts are ordinary users (no Docker/process/system access). Default `false`. See the cost caveat in [KNOWN_ISSUES.md](KNOWN_ISSUES.md#opening-registration-is-safer-but-not-free). |
 | `ALLOWED_ORIGINS` | Backend | Comma-separated CORS origins. Only needed if the frontend is served from a different origin than the API. |
 | `AGENTS_DB_PATH` / `USERS_DB_PATH` | Backend | Override the SQLite file locations (default `backend/agents.db`, `backend/users.db`). |

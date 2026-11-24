@@ -26,7 +26,8 @@ big picture and points you to the rest of `docs/` for depth. Read this first, th
 - **Process management** — list, inspect, stop (SIGTERM) or kill (SIGKILL) processes on
   the host the backend runs on.
 - **Accounts** — the dashboard requires sign-in (PBKDF2-hashed passwords, HttpOnly session
-  cookie; the first account is created on first run, and sign-up is then closed). Agents
+  cookie; the first account is created on first run, becomes the administrator, and sign-up is
+  then closed; ordinary users cannot touch the backend host). Agents
   belong to the user who enrolled them (one-time enrollment key), use their own tokens and can
   only push metrics (see
   [Architecture → Authentication](docs/ARCHITECTURE.md#authentication)).
@@ -107,9 +108,9 @@ behind each.
    will not catch regressions. Start with pytest integration tests for the auth and
    Docker/metrics routers and a handful of end-to-end tests (Overview loads, Docker
    table renders, login works).
-2. **Protect the backend host.** `/system`, `/docker/*` and `/processes` act on the machine
-   the backend runs on and are open to every signed-in user; give them an owner or admin role,
-   then consider opening registration. See [Known issues](docs/KNOWN_ISSUES.md).
+2. **Users and limits.** A screen to list users and change roles, and per-user limits (agents,
+   stored data), before opening registration to people who should not control the server.
+   See [Known issues](docs/KNOWN_ISSUES.md).
 3. **A real alerting engine.** Thresholds, persistence, and a backend that generates
    alerts from actual metric conditions, rather than the frontend only logging its own
    user-triggered actions.
