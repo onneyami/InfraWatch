@@ -22,9 +22,12 @@ Unsafe requests (POST/PUT/PATCH/DELETE) with the cookie must also send
 |---|---|
 | **Public** (no credential) | `GET /`, `GET /docs`, `GET /redoc`, `GET /openapi.json`, `GET /api/v1/health`, `POST /api/v1/agents/register`, and the `/api/v1/auth/*` endpoints below (they enforce their own rules) |
 | **Agent token** (`X-Agent-ID` + `X-Agent-Token`) | `POST /api/v1/metrics` only |
-| **Signed-in user** (session cookie) | every other `/api/v1/` route, including `/system`, `/docker/metrics`, `/docker/images` and the CIS scan endpoints, which used to be public |
+| **Signed-in user** (session cookie) | only the routes for data the caller owns: `GET /agents`, `POST /agents/enrollment-keys`, `DELETE /agents/{agent_id}`, `GET /metrics/latest`, `GET /metrics/history`, `GET /metrics/summary`, `GET /process/{pid}/history` |
+| **Administrator** (session of an admin user) | every other `/api/v1/` route: `/system`, all of `/docker/*` (including the CIS and image scans), `/processes`, `/process/{pid}`, `/process/{pid}/tree`, `/process/{pid}/stop`, and any route added later until it is deliberately granted to users |
 
-An agent token is rejected on every route except the metrics push. Rate limits: 300
+An agent token is rejected on every route except the metrics push. A signed-in user who is not
+an administrator gets `403 Administrator access required` on admin routes; someone not signed
+in gets `401` everywhere, so the split is not visible to them. Rate limits: 300
 requests/minute per user and endpoint, 60 per agent and endpoint (`429` beyond that).
 
 ## Metrics and agents (`metrics_router.py`, prefix `/api/v1`)
@@ -38,7 +41,7 @@ requests/minute per user and endpoint, 60 per agent and endpoint (`429` beyond t
 | `GET` | `/metrics/latest` | Returns `{ [agentId]: AgentMetrics }`, a bare object keyed by agent ID, **not** wrapped in `{ agents: {...} }`. Only your own agents. |
 | `GET` | `/metrics/history` | Query: `agent_id`, `metric_type` (a dotted path into the raw payload, e.g. `cpu.usage`), `limit`, `timeframe` (seconds; pass it explicitly). |
 | `GET` | `/metrics/summary` | Only your own agents. |
-| `GET` | `/agents` | Your registered agents. |
+| `GET` | `/agents` | Your agents, read from the database: it includes agents that stopped reporting (`status: "inactive"`, last activity over a minute ago) and survives backend restarts. |
 
 `metric_type` is a literal dotted-path lookup into whatever the agent posted, not a fixed
 enum. Fields nested inside arrays, such as `network.interfaces[].bytes_sent`, are not
@@ -108,7 +111,7 @@ prefix, which is worth knowing when you search for where a route is defined.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/auth/status` | Public. `{ "setup_required": bool, "registration_open": bool }`. `setup_required` is true while no account exists. |
-| `POST` | `/auth/register` | Public. Body: username, email, password (8-128 characters). The first account is always allowed; later ones need `ALLOW_REGISTRATION=true`, otherwise `403`. Sets the session cookie; the body is `{ "user": ... }` with no token. Limited to 10 attempts/hour per IP. |
+| `POST` | `/auth/register` | Public. Body: username, email, password (8-128 characters). The first account is always allowed and becomes the administrator; later ones need `ALLOW_REGISTRATION=true` and are ordinary users, otherwise `403`. Sets the session cookie; the body is `{ "user": { id, username, email, is_admin } }` with no token. Limited to 10 attempts/hour per IP. |
 | `POST` | `/auth/login` | Public. Body: `username_or_email`, `password`. Sets a fresh session cookie and ends any session the request already carried. `401` on bad credentials; `429` with `Retry-After` after repeated failures. |
 | `POST` | `/auth/logout` | Ends the session in the cookie and clears it. Idempotent. Needs the CSRF header when a cookie is present. |
 | `GET` | `/auth/me` | Current user from the cookie; `401` if missing or expired. |

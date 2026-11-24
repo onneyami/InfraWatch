@@ -88,9 +88,17 @@ class UserAuthDB:
                     email TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
                     salt TEXT NOT NULL,
-                    created_at REAL NOT NULL
+                    created_at REAL NOT NULL,
+                    is_admin INTEGER NOT NULL DEFAULT 0
                 )
             """)
+            # Databases from before roles existed: add the column, and make the first (oldest)
+            # account the administrator. This runs once, when the column is added.
+            user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+            if "is_admin" not in user_columns:
+                conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+                conn.execute("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)")
+                logger.warning("Added user roles: the first account is now the administrator.")
             # Legacy schema stored the raw token as the primary key. Drop it (this signs
             # everyone out once) rather than keep credentials readable from the DB file.
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
@@ -132,10 +140,11 @@ class UserAuthDB:
     ) -> Dict[str, Any]:
         """Create an account.
 
-        The first account can always be created. Later ones require ``allow_additional``
-        (ALLOW_REGISTRATION); otherwise RegistrationClosedError is raised. The check and
-        the insert run in one write transaction so two simultaneous first sign-ups
-        cannot both pass the "no users yet" check.
+        The first account can always be created and becomes the administrator. Later ones
+        require ``allow_additional`` (ALLOW_REGISTRATION) and are ordinary users; otherwise
+        RegistrationClosedError is raised. The check and the insert run in one write
+        transaction so two simultaneous first sign-ups cannot both pass the "no users yet"
+        check (and cannot both become administrator).
         """
         username = username.strip()
         email = email.strip().lower()
@@ -152,7 +161,8 @@ class UserAuthDB:
 
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            if not allow_additional and conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
+            is_first = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+            if not is_first and not allow_additional:
                 raise RegistrationClosedError("Registration is closed")
 
             existing = conn.execute(
@@ -162,12 +172,12 @@ class UserAuthDB:
                 raise UserExistsError("Username or email already registered")
 
             cursor = conn.execute(
-                "INSERT INTO users (username, email, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)",
-                (username, email, pwd_hash, salt, time.time()),
+                "INSERT INTO users (username, email, password_hash, salt, created_at, is_admin) VALUES (?, ?, ?, ?, ?, ?)",
+                (username, email, pwd_hash, salt, time.time(), 1 if is_first else 0),
             )
             user_id = cursor.lastrowid
 
-        return {"id": user_id, "username": username, "email": email}
+        return {"id": user_id, "username": username, "email": email, "is_admin": is_first}
 
     def authenticate(self, username_or_email: str, password: str) -> Dict[str, Any]:
         identifier = username_or_email.strip().lower()
@@ -184,7 +194,8 @@ class UserAuthDB:
         if not secrets.compare_digest(computed_hash, row["password_hash"]):
             raise InvalidCredentialsError("Invalid username/email or password")
 
-        return {"id": row["id"], "username": row["username"], "email": row["email"]}
+        return {"id": row["id"], "username": row["username"], "email": row["email"],
+                "is_admin": bool(row["is_admin"])}
 
     def create_session(self, user_id: int) -> str:
         """Create a session and return the raw token (shown once, only its hash is stored)."""
@@ -204,7 +215,7 @@ class UserAuthDB:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT u.id, u.username, u.email, s.expires_at
+                SELECT u.id, u.username, u.email, u.is_admin, s.expires_at
                 FROM sessions s JOIN users u ON u.id = s.user_id
                 WHERE s.token_hash = ?
                 """,
@@ -217,7 +228,8 @@ class UserAuthDB:
             self.delete_session(token)
             return None
 
-        return {"id": row["id"], "username": row["username"], "email": row["email"]}
+        return {"id": row["id"], "username": row["username"], "email": row["email"],
+                "is_admin": bool(row["is_admin"])}
 
     def delete_session(self, token: Optional[str]) -> None:
         if not token:

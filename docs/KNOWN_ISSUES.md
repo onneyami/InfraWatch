@@ -84,29 +84,27 @@ page refresh. There is no backend component that evaluates metrics against thres
 there are no automatically generated alerts: today's alerts and activity entries come from
 actions taken in the UI. See the README's suggested next steps.
 
-## Every signed-in user can act on the backend host
+## Opening registration is safer, but not free
 
-Agent data is owned and scoped per user (see [Architecture](ARCHITECTURE.md#agent-enrollment)),
-but everything that runs on the machine the **backend** is on is not: `/system`, `/docker/*`
-(including start/stop/delete and the CIS scan) and `/processes` (including stopping a
-process) work for any signed-in user, because they act on the backend host and not on an
-agent. Sign-up is closed after the first account for exactly this reason; do not set
-`ALLOW_REGISTRATION=true` where people who should not have full control of that host could
-register. The fix is an owner or admin role for these endpoints, and for remote hosts a
-command channel through the agent instead of local execution.
+With roles, an ordinary user cannot touch the backend host: Docker, processes, system info and
+the security scans are administrator-only, and so is any route nobody has classified. What an
+ordinary user *can* do is enroll agents and push metrics, and nothing limits how many agents
+or how much data one user may create. Every agent keeps recent samples in the backend's memory,
+so someone who signs up can use up memory. Only set `ALLOW_REGISTRATION=true` for people you
+trust with that. Per-user limits (agents, data) are the missing piece.
 
-## Process history mixes hosts of one owner
+## Roles are minimal
 
-`/process/{pid}/history` keys history by PID alone. It never crosses owners, but two agents
-of the same owner that both run a process with the same PID share one history. Keying by
-(agent, PID) is the proper fix.
+There are two roles. The first account is the only administrator, and the only way to change a
+role is editing `users.db` (see [DEVELOPMENT.md](DEVELOPMENT.md#making-someone-an-administrator)).
+There is no screen to list users, promote or demote them, or reset a password.
 
-## An agent's metadata is frozen at enrollment
+## Backend-host actions run on the backend host
 
-Hostname, IP address and version are recorded when an agent enrolls. The old 30-second
-re-registration loop used to refresh them as a side effect; it was removed (it would now fail
-without a key, and `last_seen` is updated by every metrics push anyway). If a host is renamed
-or its IP changes, remove and re-enroll the agent.
+Even for an administrator, container and process actions run on the machine the **backend** is
+on, not on the host an agent reports from. That is fine while the agent and backend share a
+machine. For remote hosts they need a command channel through the agent (the agent polls for
+approved actions and runs them locally) instead of local execution.
 
 ## Login throttling is in memory
 

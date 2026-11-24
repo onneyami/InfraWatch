@@ -91,11 +91,20 @@ Two credential types, for two kinds of caller. They are not interchangeable.
    must match the authenticated agent (otherwise `403`), so an agent can write its own metrics
    and nothing else. Only a hash of the token is stored.
 
-`middleware.py` applies a **default-deny** policy to everything under `/api/v1/`. A request
-is public only if it is on a short explicit allowlist: `GET /api/v1/health`, the five
-`/api/v1/auth/*` endpoints (which enforce their own rules), and `POST /api/v1/agents/register`
-(an agent has no token before it registers). Every other route needs a valid session. The
-full table is in [API_REFERENCE.md](API_REFERENCE.md#authentication-per-request), and
+`middleware.py` applies a **default-deny, least-privilege** policy to everything under
+`/api/v1/`. Every request falls into exactly one class:
+
+- **public**: `GET /api/v1/health`, the five `/api/v1/auth/*` endpoints (which enforce their own
+  rules) and `POST /api/v1/agents/register` (an agent has no token before it registers).
+- **agent**: `POST /api/v1/metrics`, with an agent token.
+- **user**: a short explicit allowlist (`USER_RULES`) of routes that only touch data the caller
+  owns: their agents, enrollment keys and the metrics those agents sent.
+- **admin**: everything else. That covers everything that acts on the machine the backend runs
+  on (`/system`, `/docker/*`, `/processes`, `/process/{pid}` except its history) and, by design,
+  any route nobody has classified yet. A new endpoint is administrator-only until someone
+  deliberately adds it to `USER_RULES`.
+
+The full table is in [API_REFERENCE.md](API_REFERENCE.md#authentication-per-request), and
 `backend/tests/test_api_auth.py` fails if a route becomes public or agent-accessible
 without the test's expected list being updated on purpose.
 
@@ -107,6 +116,14 @@ on another site cannot add that header without passing CORS, and the cookie is
 **Registration.** The first account can always be created (first-run setup). After that
 sign-up is closed unless `ALLOW_REGISTRATION=true`. `GET /api/v1/auth/status` tells the UI
 which screen to show. The UI shows a full-screen sign-in whenever there is no session.
+
+**Roles.** There are two: administrator and ordinary user. The first account is the
+administrator (on an existing database, the oldest account is promoted once when the column is
+added); every later account is an ordinary user. An ordinary user can manage their own agents
+and see their own metrics, but gets `403 Administrator access required` from anything that acts
+on the backend host. The role is stored in `users.db` and read on every request, so a change
+takes effect immediately. `/auth/me` reports `is_admin`, and the UI hides the Docker, Processes,
+Logs and Security pages from ordinary users.
 
 ### Agent enrollment
 
@@ -130,11 +147,11 @@ Every agent-data read is filtered by owner: `/agents`, `/metrics/latest`, `/metr
 one that does not exist (`404`). Agents that predate ownership are assigned to the first
 account when the backend starts (and when the first account is created).
 
-**What access control still does not cover:** everything that runs on the *backend host*
-itself. `/system`, `/docker/*` and `/processes` describe, and can stop things on, the
-machine the backend runs on, and any signed-in user can use them. Keep registration closed
-until those are given an owner or an admin role. See
-[Known issues](KNOWN_ISSUES.md#every-signed-in-user-can-act-on-the-backend-host).
+**What is still open:** even for an administrator, Docker and process actions run on the
+machine the *backend* is on, not on the host an agent reports from. That is fine for one
+machine; for remote hosts they need a command channel through the agent. Opening registration
+is now much safer (ordinary users cannot touch the host) but not free of cost; see
+[Known issues](KNOWN_ISSUES.md#opening-registration-is-safer-but-not-free).
 
 ### Storage
 

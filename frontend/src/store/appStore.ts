@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { Alert, Event, HostInfo, DockerInfo, AgentMetrics } from '../types/metrics'
-import { api } from '../services/api'
+import { api, type User } from '../services/api'
 import { applyTheme, watchSystemTheme } from '../theme/applyTheme'
 import { playAlertSound } from '../utils/sound'
 
@@ -56,7 +56,7 @@ interface AppState {
   runCisScan: () => Promise<void>
 
   // User auth
-  currentUser: { id: number; username: string; email: string } | null
+  currentUser: User | null
   // false until the first /auth/me answer arrives, so the UI neither flashes the sign-in
   // screen at an already signed-in user nor shows the dashboard to an anonymous one
   authReady: boolean

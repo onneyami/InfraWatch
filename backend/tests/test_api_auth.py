@@ -38,6 +38,18 @@ EXPECTED_PUBLIC = {
     ("GET", "/api/v1/auth/me"),
 }
 EXPECTED_AGENT = {("POST", "/api/v1/metrics")}
+# The only routes an ordinary (non-admin) user may call: they touch data the caller owns.
+# Everything else, including any route added later, is administrator-only until it is
+# deliberately added here AND to USER_RULES in middleware.py.
+EXPECTED_USER = {
+    ("GET", "/api/v1/agents"),
+    ("POST", "/api/v1/agents/enrollment-keys"),
+    ("DELETE", "/api/v1/agents/x"),
+    ("GET", "/api/v1/metrics/latest"),
+    ("GET", "/api/v1/metrics/history"),
+    ("GET", "/api/v1/metrics/summary"),
+    ("GET", "/api/v1/process/x/history"),
+}
 
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
@@ -89,8 +101,15 @@ class RouteInventoryTests(unittest.TestCase):
         self.assertGreater(len(routes), 25, "route discovery looks broken")
         public = {r for r in routes if mw.classify(*r) == mw.PUBLIC}
         agent = {r for r in routes if mw.classify(*r) == mw.AGENT}
+        user = {r for r in routes if mw.classify(*r) == mw.USER}
+        admin = {r for r in routes if mw.classify(*r) == mw.ADMIN}
         self.assertEqual(public, EXPECTED_PUBLIC)
         self.assertEqual(agent, EXPECTED_AGENT)
+        self.assertEqual(user, EXPECTED_USER)
+        self.assertGreaterEqual(len(admin), 20, "the Docker/process/system routes should all be admin-only")
+        self.assertIn(("GET", "/api/v1/system"), admin)
+        self.assertIn(("POST", "/api/v1/docker/container/x/stop"), admin)
+        self.assertIn(("POST", "/api/v1/process/x/stop"), admin)
 
     def test_every_other_route_is_401_without_credentials(self):
         reset_state()
@@ -107,7 +126,7 @@ class RouteInventoryTests(unittest.TestCase):
         headers = {"X-Agent-ID": "inventory-agent", "X-Agent-Token": token}
         client = TestClient(app)
         for method, path in api_routes():
-            if mw.classify(method, path) != mw.USER:
+            if mw.classify(method, path) not in (mw.USER, mw.ADMIN):
                 continue
             with self.subTest(method=method, path=path):
                 self.assertEqual(client.request(method, path, headers=headers).status_code, 401)
@@ -125,6 +144,7 @@ class AuthFlowTests(unittest.TestCase):
         r = self.client.post("/api/v1/auth/register", json=ALICE)
         self.assertEqual(r.status_code, 200, r.text)
         self.assertNotIn("token", r.json())
+        self.assertIs(r.json()["user"]["is_admin"], True)       # the first account is the administrator
         cookie = r.headers["set-cookie"].lower()
         for attr in ("httponly", "samesite=lax", "path=/api", f"{SESSION_COOKIE_NAME}="):
             self.assertIn(attr, cookie)
@@ -174,6 +194,43 @@ class AuthFlowTests(unittest.TestCase):
         token = "dev-dashboard-token-change-me"
         self.assertEqual(self.client.get("/api/v1/docker/metrics", headers={"X-Dashboard-Token": token}).status_code, 401)
         self.assertEqual(self.client.get(f"/api/v1/docker/metrics?dashboard_token={token}").status_code, 401)
+
+
+class AdminRoleTests(unittest.TestCase):
+    """alice (first account) is the administrator, bob an ordinary user."""
+
+    def setUp(self):
+        reset_state()
+        self.alice = TestClient(app)
+        self.alice.post("/api/v1/auth/register", json=ALICE)
+        user_auth_db.register("bob", "bob@example.com", "correct-horse", allow_additional=True)
+        self.bob = TestClient(app)
+        r = self.bob.post("/api/v1/auth/login", json={"username_or_email": "bob", "password": "correct-horse"})
+        self.assertEqual(r.status_code, 200, r.text)
+
+    def test_the_role_is_reported_to_the_ui(self):
+        self.assertIs(self.alice.get("/api/v1/auth/me").json()["user"]["is_admin"], True)
+        self.assertIs(self.bob.get("/api/v1/auth/me").json()["user"]["is_admin"], False)
+
+    def test_ordinary_users_get_403_on_every_admin_route(self):
+        admin_routes = [r for r in api_routes() if mw.classify(*r) == mw.ADMIN]
+        self.assertGreaterEqual(len(admin_routes), 20)
+        for method, path in admin_routes:
+            with self.subTest(method=method, path=path):
+                r = self.bob.request(method, path, headers=CSRF)
+                self.assertEqual(r.status_code, 403, r.text)
+                self.assertEqual(r.json()["detail"], "Administrator access required")
+
+    def test_administrators_are_let_through_to_a_host_route(self):
+        # only a safe read: the point is that the policy does not stop an admin
+        self.assertNotIn(self.alice.get("/api/v1/system").status_code, (401, 403))
+
+    def test_ordinary_users_keep_access_to_their_own_agent_routes(self):
+        for method, path in sorted(EXPECTED_USER):
+            if method != "GET":
+                continue
+            with self.subTest(path=path):
+                self.assertNotIn(self.bob.get(path).status_code, (401, 403))
 
 
 def metrics(agent_id, cpu=5.0):
@@ -237,6 +294,31 @@ class AgentEnrollmentTests(unittest.TestCase):
         self.assertEqual(r.status_code, 409)
         info = auth_db.get_agent("srv-1")
         self.assertEqual((info["hostname"], info["ip_address"]), ("h", "10.0.0.1"))
+
+    def test_an_agent_that_went_quiet_is_still_listed_and_can_be_removed(self):
+        self.enroll(self.key_for(self.alice), "quiet-srv")
+        self.assertEqual(self.alice.get("/api/v1/agents").json()["agents"][0]["status"], "active")  # just enrolled
+        stores.agent_last_seen["quiet-srv"] = time.time() - 3600                                   # ...an hour of silence
+        agents = {a["id"]: a for a in self.alice.get("/api/v1/agents").json()["agents"]}
+        self.assertEqual(agents["quiet-srv"]["status"], "inactive")
+        self.assertEqual(agents["quiet-srv"]["hostname"], "h")
+        self.assertEqual(self.alice.delete("/api/v1/agents/quiet-srv", headers=CSRF).status_code, 200)
+        self.assertEqual(self.alice.get("/api/v1/agents").json()["agents"], [])
+
+    def test_agents_are_still_listed_after_a_backend_restart(self):
+        token = self.enroll(self.key_for(self.alice), "srv-1").json()["token"]
+        self.push(token, "srv-1")
+        stores.agent_last_seen.clear()          # what a restart does: memory is empty,
+        stores.agents_registry.clear()          # the database is not
+        agent = self.alice.get("/api/v1/agents").json()["agents"][0]
+        self.assertEqual((agent["id"], agent["hostname"]), ("srv-1", "h"))
+        self.assertEqual(agent["status"], "active")        # last_seen comes from the database
+        self.assertGreater(agent["last_seen"], time.time() - 60)
+
+    def test_idle_agents_of_another_user_are_not_listed(self):
+        bob = self.second_user()
+        self.enroll(self.key_for(self.alice), "alice-quiet")
+        self.assertEqual(bob.get("/api/v1/agents").json()["agents"], [])
 
     def test_an_agent_cannot_push_metrics_as_another_agent(self):
         t1 = self.enroll(self.key_for(self.alice), "srv-1").json()["token"]
