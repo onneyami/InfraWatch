@@ -1,17 +1,23 @@
 """
 Middleware: authentication, CSRF protection and rate limiting.
 
-Access policy (default deny for everything under /api/v1/):
+Access policy (default deny, least privilege, for everything under /api/v1/):
 
 - PUBLIC   reachable without credentials: the health probe, API docs, and the auth
            endpoints (which enforce their own rules: credential checks, throttling,
            registration policy). Agent self-registration is public too, because an agent
-           has no token until it registers.
+           has no token until it registers (its one-time enrollment key is the credential).
 - AGENT    POST /api/v1/metrics only. Requires X-Agent-ID + X-Agent-Token. An agent token
            is NOT accepted anywhere else, so a compromised monitored host cannot read
            dashboard data or run Docker/process actions.
-- USER     every other /api/v1/ route. Requires a valid session cookie (HttpOnly, set at
-           login by routers/auth_router.py).
+- USER     a short explicit allowlist (USER_RULES): the endpoints that only touch data the
+           caller owns, namely the agents they enrolled and the metrics those agents sent.
+           Requires a valid session cookie (HttpOnly, set at login).
+- ADMIN    everything else under /api/v1/. Requires a session whose user is an
+           administrator. This covers everything that acts on the machine the backend runs
+           on (Docker, processes, system info) and, by design, any route nobody has
+           classified yet: a new endpoint is admin-only until it is deliberately added to
+           USER_RULES.
 
 CSRF: unsafe requests (POST/PUT/PATCH/DELETE) that carry the session cookie must also send
 ``X-Requested-With: XMLHttpRequest``. Browsers cannot attach that header cross-site without
@@ -21,6 +27,7 @@ cannot make an authenticated state-changing request.
 
 from typing import List, Optional, Tuple
 import os
+import re
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -65,7 +72,7 @@ def get_allowed_origins() -> List[str]:
     return predefined.get(env, predefined["dev"])
 
 
-PUBLIC, AGENT, USER = "public", "agent", "user"
+PUBLIC, AGENT, USER, ADMIN = "public", "agent", "user", "admin"
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 CSRF_HEADER = "x-requested-with"
@@ -92,14 +99,28 @@ AGENT_PUBLIC = frozenset({("POST", "/api/v1/agents/register")})
 AGENT_ROUTES = frozenset({("POST", "/api/v1/metrics")})
 
 
+# Endpoints any signed-in user may call. Each one only reads or changes data owned by the
+# caller (the handler filters by owner). Keep this list short and explicit: everything not on
+# it, including routes added later, requires an administrator.
+USER_RULES = (
+    ("GET", re.compile(r"^/api/v1/agents$")),
+    ("POST", re.compile(r"^/api/v1/agents/enrollment-keys$")),
+    ("DELETE", re.compile(r"^/api/v1/agents/[^/]+$")),
+    ("GET", re.compile(r"^/api/v1/metrics/(latest|history|summary)$")),
+    ("GET", re.compile(r"^/api/v1/process/[^/]+/history$")),
+)
+
+
 def classify(method: str, path: str) -> str:
-    """Return which credentials a request needs. Default deny under /api/v1/."""
+    """Return which credentials a request needs. Default deny, least privilege."""
     if path in PUBLIC_PATHS or path in AUTH_PATHS or (method, path) in AGENT_PUBLIC:
         return PUBLIC
     if (method, path) in AGENT_ROUTES:
         return AGENT
     if path.startswith("/api/v1/"):
-        return USER
+        if any(m == method and rule.match(path) for m, rule in USER_RULES):
+            return USER
+        return ADMIN
     return PUBLIC  # non-API paths (e.g. /docs/oauth2-redirect) carry no data
 
 
@@ -182,10 +203,12 @@ async def auth_middleware(request: Request, call_next):
         request.state.agent_id = agent_id
         return await call_next(request)
 
-    # USER
+    # USER or ADMIN: both need a session; ADMIN additionally needs an administrator.
     user, limited = await run_in_threadpool(_authenticate_user, session_token, path)
     if user is None:
         return _error(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    if kind == ADMIN and not user.get("is_admin"):
+        return _error(status.HTTP_403_FORBIDDEN, "Administrator access required")
     if limited:
         return _error(
             status.HTTP_429_TOO_MANY_REQUESTS,

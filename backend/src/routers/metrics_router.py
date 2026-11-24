@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from typing import Dict, List, Optional, Any, Set
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 import json
 import statistics
@@ -47,6 +47,14 @@ def _clean_str(value: Any, max_len: int) -> str:
     if not isinstance(value, str):
         return ""
     return "".join(ch for ch in value.strip() if ch.isprintable())[:max_len]
+
+
+def _db_timestamp(value: Any) -> float:
+    """SQLite CURRENT_TIMESTAMP ('YYYY-MM-DD HH:MM:SS', UTC) to epoch seconds; 0 if unreadable."""
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        return 0.0
 
 
 async def _owned_agent_ids(request: Request) -> Set[str]:
@@ -249,29 +257,40 @@ async def get_metrics_summary(request: Request, timeframe: int = 3600):
 
 @router.get("/agents")
 async def list_agents(request: Request, status: Optional[str] = None):
-    """Список агентов текущего пользователя"""
+    """Агенты текущего пользователя, включая те, что давно не присылают метрики.
+
+    Источник — база агентов, а не только память: агент остаётся в списке (и его можно
+    удалить), даже если он замолчал или бэкенд перезапускался. Время последней активности
+    берётся из памяти, а если её нет (после рестарта), из базы: она обновляется при каждом
+    аутентифицированном запросе агента.
+    """
+    owner_id = require_user_id(request)
+    rows = await run_in_threadpool(auth_db.list_agents, True, owner_id)
+
     agents = []
-    owned = await _owned_agent_ids(request)
-    for agent_id, last_seen in agent_last_seen.items():
-        if agent_id not in owned:
-            continue
-        agent_status = "active" if time.time() - last_seen < 60 else "inactive"
-        
+    now = time.time()
+    for row in rows:
+        agent_id = row["agent_id"]
+        last_seen = agent_last_seen.get(agent_id) or _db_timestamp(row["last_seen"])
+        agent_status = "active" if now - last_seen < 60 else "inactive"
+
         if status and agent_status != status:
             continue
-        
-        agent_info = agents_registry.get(agent_id, {})
+
+        info = agents_registry.get(agent_id, {})
         agents.append({
             "id": agent_id,
             "status": agent_status,
             "last_seen": last_seen,
-            "last_seen_human": datetime.fromtimestamp(last_seen).isoformat(),
-            "hostname": agent_info.get("hostname", "unknown"),
-            "version": agent_info.get("version", "unknown"),
-            "features": agent_info.get("features", {}),
+            "last_seen_human": datetime.fromtimestamp(last_seen).isoformat() if last_seen else None,
+            "hostname": info.get("hostname") or row["hostname"] or "unknown",
+            "version": info.get("version") or row["version"] or "unknown",
+            "ip_address": row["ip_address"] or "",
+            "registered_at": row["created_at"],
+            "features": info.get("features", {}),
             "metrics_count": len(metrics_history.get(agent_id, []))
         })
-    
+
     return {
         "count": len(agents),
         "agents": agents,
